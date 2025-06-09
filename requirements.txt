@@ -1,6 +1,9 @@
 playwright
 requests
 python-dotenv
+streamlit
+pandas
 
-pywhatkit
-twilio
+# Telegram support (uses basic requests, no additional library needed)
+# Optional: python-telegram-bot (for advanced Telegram features)
+# python-telegram-bot
