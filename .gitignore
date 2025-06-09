@@ -17,6 +17,11 @@ __pycache__/
 # Logs
 *.log
 
-# Data files (optional - uncomment if you don't want to commit data)
-# storage/listings/*.json
-# cli/data/*.json
+# Data files - exclude all generated listing data
+storage/listings/*.json
+cli/data/*.json
+scraper/*.json
+scraper/latest_results.json
+
+# Temporary files
+*.tmp
