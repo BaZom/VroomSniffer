@@ -14,10 +14,7 @@ from notifier.telegram import send_telegram_message, format_car_listing_message
 from services.caralyze_service import (
     get_filter_key,
     load_json_dict,
-    save_json_dict,
-    run_scraper_and_load_results,
-    get_listings_for_filter,
-    extract_prices
+    get_listings_for_filter
 )
 
 def build_search_url_ui(filters):
