@@ -49,7 +49,7 @@ import argparse
 import sys
 import subprocess
 import json
-import os
+import time
 from pathlib import Path
 
 # Add the parent directory to the path so we can import from project modules
@@ -67,9 +67,17 @@ NEW_RESULTS_PATH = CLI_DATA_DIR / "latest_new_results.json"
 # Create CLI data directory if it doesn't exist
 CLI_DATA_DIR.mkdir(exist_ok=True)
 
+def _check_listings_exist():
+    """Helper function to check if listings exist and print error if not"""
+    listings = load_json_data(LATEST_RESULTS_PATH)
+    if not listings:
+        print("[!] No listings found. Run 'python cli/main.py run <url>' first.")
+        return False
+    return True
+
 def load_json_data(path):
     """Load data from JSON file"""
-    if os.path.exists(path):
+    if Path(path).exists():
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     return []
@@ -81,11 +89,10 @@ def save_json_data(data, path):
 
 def list_listings():
     """List the latest scraped listings from JSON file"""
-    listings = load_json_data(LATEST_RESULTS_PATH)
-    if not listings:
-        print("[!] No listings found. Run 'python cli/main.py run <url>' first.")
+    if not _check_listings_exist():
         return
     
+    listings = load_json_data(LATEST_RESULTS_PATH)
     print(f"[*] Found {len(listings)} listings:")
     for i, listing in enumerate(listings[:10], 1):  # Show only first 10
         title = listing.get("Title", "Unknown")[:50]
@@ -95,10 +102,10 @@ def list_listings():
 
 def search_listings(keyword):
     """Search listings by keyword in title"""
-    listings = load_json_data(LATEST_RESULTS_PATH)
-    if not listings:
-        print("[!] No listings found. Run 'python cli/main.py run <url>' first.")
+    if not _check_listings_exist():
         return
+    
+    listings = load_json_data(LATEST_RESULTS_PATH)
     
     keyword = keyword.lower()
     matches = []
@@ -118,11 +125,10 @@ def search_listings(keyword):
 
 def send_listing(listing_index):
     """Send a listing via Telegram by index"""
-    listings = load_json_data(LATEST_RESULTS_PATH)
-    if not listings:
-        print("[!] No listings found. Run 'python cli/main.py run <url>' first.")
+    if not _check_listings_exist():
         return
     
+    listings = load_json_data(LATEST_RESULTS_PATH)
     if 1 <= listing_index <= len(listings):
         listing = listings[listing_index - 1]
         
@@ -139,10 +145,10 @@ def send_listing(listing_index):
 
 def send_top_listings(count=5):
     """Send top N listings via Telegram"""
-    listings = load_json_data(LATEST_RESULTS_PATH)
-    if not listings:
-        print("[!] No listings found. Run 'python cli/main.py run <url>' first.")
+    if not _check_listings_exist():
         return
+    
+    listings = load_json_data(LATEST_RESULTS_PATH)
     
     actual_count = min(count, len(listings))
     print(f"[*] Sending top {actual_count} listings via Telegram...")
@@ -157,20 +163,18 @@ def send_top_listings(count=5):
             success_count += 1
         else:
             print(f"[!] Failed to send listing {i+1}")
-        
-        # Rate limiting - wait between messages
+          # Rate limiting - wait between messages
         if i < actual_count - 1:
-            import time
             time.sleep(2)  # 2 second delay between messages
     
     print(f"[+] Bulk notification complete! {success_count}/{actual_count} messages sent successfully.")
 
 def notify_new_findings(search_keyword=""):
     """Send notification about new findings with optional search filter"""
-    listings = load_json_data(LATEST_RESULTS_PATH)
-    if not listings:
-        print("[!] No listings found. Run 'python cli/main.py run <url>' first.")
+    if not _check_listings_exist():
         return
+    
+    listings = load_json_data(LATEST_RESULTS_PATH)
     
     # Filter by keyword if provided
     filtered_listings = listings

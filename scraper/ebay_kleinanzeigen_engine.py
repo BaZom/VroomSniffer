@@ -6,7 +6,7 @@ from playwright.sync_api import sync_playwright
 import json
 import argparse
 import sys
-import os
+import time
 from pathlib import Path
 
 # Add parent directory to path for imports
@@ -50,9 +50,6 @@ def fetch_listings_from_url(url):
         browser.close()
     return [l for l in parsed if l]
 
-def collect_listings(url):
-    return fetch_listings_from_url(url)
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", type=str, required=True)
@@ -60,7 +57,7 @@ if __name__ == "__main__":
     parser.add_argument("--notify-count", type=int, default=5, help="Number of top listings to notify (default: 5)")
     args = parser.parse_args()
     
-    listings = collect_listings(args.url)
+    listings = fetch_listings_from_url(args.url)
     
     # Save results
     with open("scraper/latest_results.json", "w", encoding="utf-8") as f:
@@ -82,7 +79,6 @@ if __name__ == "__main__":
                 
                 # Rate limiting - wait between messages
                 if i < min(args.notify_count, len(listings)) - 1:
-                    import time
                     time.sleep(2)  # 2 second delay between messages
         
         print(f"[+] Notification batch complete!")

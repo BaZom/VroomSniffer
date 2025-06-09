@@ -3,10 +3,11 @@ Service layer for caralyze: handles scraping, caching, price extraction, filter 
 This is the main interface between UI and backend logic (scraper, notifications, proxy, etc).
 """
 import sys
-import os
 import json
+import time
+import re
+import subprocess
 from pathlib import Path
-from datetime import datetime
 
 # Add parent directory for imports
 sys.path.append(str(Path(__file__).parent.parent))
@@ -26,7 +27,7 @@ def get_filter_key(filters):
     ])
 
 def load_json_dict(path):
-    if os.path.exists(path):
+    if Path(path).exists():
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
@@ -53,8 +54,8 @@ def run_scraper_and_load_results(filters, build_search_url_ui, root_dir):
             cwd=root_dir, capture_output=True, text=True
         )
         if result.returncode == 0:
-            json_path = os.path.join(root_dir, "scraper", "latest_results.json")
-            if os.path.exists(json_path):
+            json_path = Path(root_dir) / "scraper" / "latest_results.json"
+            if json_path.exists():
                 with open(json_path, "r", encoding="utf-8") as f:
                     listings_data = json.load(f)
         else:
@@ -90,14 +91,9 @@ def get_listings_for_filter(filters, all_old_path, latest_new_path, build_search
     new_dict = load_json_dict(latest_new_path)
     new_dict[filter_key] = new_listings
     save_json_dict(new_dict, latest_new_path)
-    all_dict = load_json_dict(all_old_path)
-    new_dict = load_json_dict(latest_new_path)
-    all_listings = all_dict.get(filter_key, [])
-    new_listings = new_dict.get(filter_key, [])
-    return all_listings, new_listings
+    return merged_listings, new_listings
 
 def extract_prices(listings):
-    import re
     prices = []
     for item in listings:
         price_str = item.get("Price", "").replace(".", "").replace(",", "").replace("€", "").strip()
@@ -153,10 +149,8 @@ def send_new_listing_notifications(new_listings, filters=None, max_count=5):
             success = send_telegram_message(formatted_msg)
             if success:
                 sent_count += 1
-            
-            # Rate limiting
+              # Rate limiting
             if i < min(max_count, len(new_listings)) - 1:
-                import time
                 time.sleep(1.5)  # 1.5 second delay between messages
         
         return {
