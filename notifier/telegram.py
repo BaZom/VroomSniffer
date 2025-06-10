@@ -8,13 +8,19 @@ import requests
 import os
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables on import
 load_dotenv()
 
-# Telegram configuration
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-TEST_MODE = os.getenv("TELEGRAM_TEST_MODE", "false").lower() == "true"
+def _get_telegram_config():
+    """Get fresh Telegram configuration from environment variables"""
+    # Reload environment variables to pick up any changes
+    load_dotenv(override=True)
+    
+    return {
+        'bot_token': os.getenv("TELEGRAM_BOT_TOKEN"),
+        'chat_id': os.getenv("TELEGRAM_CHAT_ID"),
+        'test_mode': os.getenv("TELEGRAM_TEST_MODE", "false").lower() == "true"
+    }
 
 def send_telegram_message(text):
     """
@@ -26,22 +32,27 @@ def send_telegram_message(text):
     Returns:
         bool: True if message sent successfully, False otherwise
     """
-    if not BOT_TOKEN or not CHAT_ID:
+    # Get fresh configuration each time
+    config = _get_telegram_config()
+    bot_token = config['bot_token']
+    chat_id = config['chat_id']
+    test_mode = config['test_mode']
+    
+    if not bot_token or not chat_id:
         print("[!] Error: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured")
         print("[!] Please set these environment variables or add them to .env file")
         return False
-    
-    # Test mode - simulate sending without actually connecting
-    if TEST_MODE:
-        print(f"[TEST MODE] Would send Telegram message to {CHAT_ID}:")
+      # Test mode - simulate sending without actually connecting
+    if test_mode:
+        print(f"[TEST MODE] Would send Telegram message to {chat_id}:")
         print(f"[TEST MODE] Message: {text}")
         print(f"[+] Telegram message sent successfully (test mode)")
         return True
     
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     
     payload = {
-        'chat_id': CHAT_ID,
+        'chat_id': chat_id,
         'text': text,
         'parse_mode': 'HTML'  # Enable HTML formatting
     }
