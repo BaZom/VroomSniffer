@@ -14,8 +14,13 @@ from notifier.telegram import send_telegram_message, format_car_listing_message
 from services.caralyze_service import (
     get_filter_key,
     load_json_dict,
-    get_listings_for_filter
+    get_listings_for_filter,
+    show_statistics,
+    manual_send_listings
 )
+from ui.filters import get_sidebar_filters
+from ui.results import display_results
+from ui.telegram_controls import manual_send_listings_ui, telegram_test_button
 
 def build_search_url_ui(filters):
     """Build a Kleinanzeigen search URL from the given filter dictionary."""
@@ -43,23 +48,15 @@ def build_search_url_ui(filters):
         url += "+" + "+".join(params)
     return url
 
-def show_statistics(listings_data, show_trend=True):
+def show_statistics_ui(listings_data, show_trend=True):
     """Display statistics and optionally a price trend chart."""
-    prices = []
-    for item in listings_data:
-        price_str = item.get("Price", "").replace(".", "").replace(",", "").replace("€", "").strip()
-        match = re.search(r"\d+", price_str)
-        if match:
-            prices.append(int(match.group()))
-    avg_price = int(sum(prices) / len(prices)) if prices else 0
-    
+    avg_price, count, prices = show_statistics(listings_data)
     if show_trend and prices:
         st.metric("Average Price", f"€{avg_price:,}")
         st.metric("Total Listings", f"{len(listings_data)}")
         chart_data = pd.DataFrame({"index": range(len(prices)), "price": prices})
         st.line_chart(chart_data.set_index("index"))
-    
-    return avg_price, len(listings_data)
+    return avg_price, count
 
 st.set_page_config(page_title="CarAlyze - Car Monitor", page_icon="🚗", layout="wide")
 
@@ -125,23 +122,28 @@ def get_sidebar_filters():
     }
 
 def _manual_send_listings(listings):
-    """Send listings manually to Telegram"""
+    """Send listings manually to Telegram, logging failed messages with errors and retrying once if network error occurs."""
     if not listings:
         st.warning("No listings to send")
         return
-    
+
     with st.spinner(f"Sending {len(listings)} listings..."):
-        success_count = 0
-        for i, listing in enumerate(listings):
-            formatted_msg = format_car_listing_message(listing)
-            if send_telegram_message(formatted_msg):
-                success_count += 1
-            if i < len(listings) - 1:
-                time.sleep(1.5)  # Rate limiting
-        
+        from notifier.telegram import send_telegram_message, format_car_listing_message
+        success_count, failed = manual_send_listings(
+            listings,
+            send_telegram_message=send_telegram_message,
+            format_car_listing_message=format_car_listing_message,
+            parse_mode="HTML",
+            retry_on_network_error=True
+        )
         if success_count > 0:
             st.success(f"✅ Sent {success_count}/{len(listings)} listings!")
-        else:
+        if failed:
+            st.error(f"❌ Failed to send {len(failed)} listings!")
+            for f in failed:
+                st.write(f"Listing #{f['index']} - {f['title']}")
+                st.code(f["error"], language="text")
+        elif success_count == 0:
             st.error("❌ Failed to send listings")
 
 def _display_results(new_listings, all_listings):
@@ -158,7 +160,7 @@ def _display_results(new_listings, all_listings):
     # New listings section
     if new_listings:
         st.subheader("🆕 New Listings")
-        avg_new, _ = show_statistics(new_listings, show_trend=False)
+        avg_new, _ = show_statistics_ui(new_listings, show_trend=False)
         st.info(f"Average price: €{avg_new:,}")
         
         df_new = pd.DataFrame(new_listings)
@@ -174,7 +176,7 @@ def _display_results(new_listings, all_listings):
     # All listings section
     if all_listings:
         with st.expander("📋 All Listings & Analytics", expanded=False):
-            show_statistics(all_listings, show_trend=True)
+            show_statistics_ui(all_listings, show_trend=True)
             df_all = pd.DataFrame(all_listings)
             df_all.insert(0, 'No.', range(1, len(df_all) + 1))
             st.dataframe(df_all, hide_index=True, use_container_width=True)
@@ -207,14 +209,13 @@ def main():
     # ================== COLUMN 1: Search & Results ==================
     with col1:
         st.header("🔍 Search Configuration")
-        
         # Show search URL
-        if filters.get("custom_url"):
-            st.code(filters["custom_url"], language="text")
+        custom_url = filters.get("custom_url", "")
+        if custom_url:
+            st.code(custom_url, language="text")
         else:
             search_url = build_search_url_ui(filters)
             st.code(search_url, language="text")
-        
         # Manual monitoring button
         if st.button("🔍 Run Manual Check", type="primary", use_container_width=True):
             with st.spinner("Checking for listings..."):
@@ -228,6 +229,7 @@ def main():
                 _manual_send_listings(new_listings)
             
             # Display results
+            _display_results = lambda new, all_: display_results(new, all_, manual_send_listings_ui)
             _display_results(new_listings, all_listings)
         
         # Load and display cached results
@@ -241,6 +243,7 @@ def main():
                 
                 if cached_all or cached_new:
                     st.info("📋 Showing cached results (click 'Run Manual Check' for fresh data)")
+                    _display_results = lambda new, all_: display_results(new, all_, manual_send_listings_ui)
                     _display_results(cached_new, cached_all)
                 else:
                     st.info("💡 Click 'Run Manual Check' to start monitoring")
@@ -325,33 +328,7 @@ def main():
             st.success("✅ **AUTO-SEND ON**")
         else:
             st.info("⏸️ Manual mode")
+        telegram_test_button()
         
-        # Test connection
-        if st.button("🧪 Test", use_container_width=True):
-            success = send_telegram_message("🚗 Test from CarAlyze!")
-            if success:
-                st.success("✅ Connected!")
-            else:
-                st.error("❌ Connection failed!")
-        
-        # Quick stats
-        st.subheader("📊 Quick Stats")
-        try:
-            all_dict = load_json_dict(all_old_path)
-            new_dict = load_json_dict(latest_new_path)
-            filter_key = get_filter_key(filters)
-            total = len(all_dict.get(filter_key, []))
-            new_count = len(new_dict.get(filter_key, []))
-            
-            st.metric("Total", total)
-            st.metric("New", new_count)
-            
-            if new_count > 0:
-                if st.button("📤 Send New", use_container_width=True):
-                    _manual_send_listings(new_dict.get(filter_key, []))
-        except:
-            st.metric("Total", "0")
-            st.metric("New", "0")
-
 if __name__ == "__main__":
     main()

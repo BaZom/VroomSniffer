@@ -22,15 +22,17 @@ def _get_telegram_config():
         'test_mode': os.getenv("TELEGRAM_TEST_MODE", "false").lower() == "true"
     }
 
-def send_telegram_message(text):
+def send_telegram_message(text, parse_mode=None):
     """
     Send a message via Telegram Bot API
     
     Args:
         text (str): Message text to send
+        parse_mode (str, optional): Telegram parse mode (e.g., 'HTML', 'MarkdownV2')
         
     Returns:
         bool: True if message sent successfully, False otherwise
+        str: Error message if failed, else None
     """
     # Get fresh configuration each time
     config = _get_telegram_config()
@@ -39,42 +41,40 @@ def send_telegram_message(text):
     test_mode = config['test_mode']
     
     if not bot_token or not chat_id:
-        print("[!] Error: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured")
-        print("[!] Please set these environment variables or add them to .env file")
-        return False
-      # Test mode - simulate sending without actually connecting
+        return False, "[!] TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured"
+    # Test mode - simulate sending without actually connecting
     if test_mode:
         print(f"[TEST MODE] Would send Telegram message to {chat_id}:")
         print(f"[TEST MODE] Message: {text}")
         print(f"[+] Telegram message sent successfully (test mode)")
-        return True
+        return True, None
     
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     
     payload = {
         'chat_id': chat_id,
-        'text': text,
-        'parse_mode': 'HTML'  # Enable HTML formatting
+        'text': text  # Use the actual message text
+        # Do not set 'parse_mode' for plain text
     }
+    if parse_mode:
+        payload['parse_mode'] = parse_mode
     
     try:
         response = requests.post(url, data=payload)
-        response.raise_for_status()
-        
-        result = response.json()
-        if result.get('ok'):
-            print(f"[+] Sent Telegram message successfully")
-            return True
+        try:
+            result = response.json()
+        except Exception:
+            result = response.text
+        if response.status_code != 200:
+            return False, str(result)
+        if isinstance(result, dict) and result.get('ok'):
+            return True, None
         else:
-            print(f"[!] Telegram API error: {result.get('description', 'Unknown error')}")
-            return False
-            
+            return False, str(result)
     except requests.exceptions.RequestException as e:
-        print(f"[!] Error sending Telegram message: {e}")
-        return False
+        return False, str(e)
     except Exception as e:
-        print(f"[!] Unexpected error: {e}")
-        return False
+        return False, str(e)
 
 def format_car_listing_message(listing):
     """
@@ -104,9 +104,9 @@ def format_car_listing_message(listing):
 if __name__ == "__main__":
     # Test the Telegram notifier
     test_message = "🚗 Test message from Caralyze Car Scraper!"
-    success = send_telegram_message(test_message)
+    success, error = send_telegram_message(test_message)
     
     if success:
         print("[+] Telegram notifier test successful!")
     else:
-        print("[!] Telegram notifier test failed!")
+        print(f"[!] Telegram notifier test failed: {error}")

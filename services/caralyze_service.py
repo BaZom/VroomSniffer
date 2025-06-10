@@ -221,3 +221,47 @@ def send_monitoring_summary(all_listings, new_listings, filters=None):
     except Exception as e:
         print(f"[!] Error sending monitoring summary: {e}")
         return False
+
+def show_statistics(listings_data):
+    """Calculate statistics for listings (average price, count, price list)."""
+    import re
+    prices = []
+    for item in listings_data:
+        price_str = item.get("Price", "").replace(".", "").replace(",", "").replace("€", "").strip()
+        match = re.search(r"\d+", price_str)
+        if match:
+            prices.append(int(match.group()))
+    avg_price = int(sum(prices) / len(prices)) if prices else 0
+    return avg_price, len(listings_data), prices
+
+def manual_send_listings(listings, send_telegram_message, format_car_listing_message, parse_mode="HTML", retry_on_network_error=True):
+    """Send listings to Telegram, retrying once on network error. Returns (success_count, failed_list)."""
+    import time
+    success_count = 0
+    failed = []
+    for i, listing in enumerate(listings):
+        formatted_msg = format_car_listing_message(listing)
+        success, error = send_telegram_message(formatted_msg, parse_mode=parse_mode)
+        # Retry once if network error
+        if not success and error and ("ConnectionResetError" in error or "Connection aborted" in error) and retry_on_network_error:
+            time.sleep(2)
+            success, error = send_telegram_message(formatted_msg, parse_mode=parse_mode)
+        if success:
+            success_count += 1
+        else:
+            failed.append({
+                'index': i+1,
+                'title': listing.get('Title', 'Unknown'),
+                'error': error
+            })
+        if i < len(listings) - 1:
+            time.sleep(1.5)  # Rate limiting
+    return success_count, failed
+
+# --- End of business logic and service functions ---
+
+# The following functions are for use by the UI layer (e.g., Streamlit) and should not contain UI code themselves.
+# All UI rendering should be handled in the UI modules (e.g., ui/streamlit_app.py).
+
+# If you want to further split this file, consider moving notification-related functions to a new file, e.g., services/notification_service.py
+# and scraping-related functions to services/scraping_service.py
