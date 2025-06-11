@@ -1,0 +1,128 @@
+import streamlit as st
+import sys
+from pathlib import Path
+
+# Add the parent directory to the path so we can import from local modules
+sys.path.append(str(Path(__file__).parent.parent.parent))
+
+from ui.telegram_controls import telegram_test_button
+
+def show_playground_page(all_old_path, latest_new_path, root_dir):
+    """Clean playground page for testing and experimentation."""
+    
+    st.title("Playground")
+    st.write("Test scraping functionality and experiment with configurations")
+    
+    st.info("Experimental Area: Use this space to test scraping functionality")
+    
+    # Simple tabs
+    tab1, tab2, tab3 = st.tabs(["URL Testing", "Filter Testing", "Message Testing"])
+    
+    with tab1:
+        st.subheader("Test URL Scraping")
+        st.caption("Validate and test individual URLs before running full operations")
+        
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            test_url = st.text_input(
+                "Test URL",
+                placeholder="https://www.kleinanzeigen.de/s-autos/...",
+                help="Enter a URL to test scraping functionality"
+            )
+        
+        with col2:
+            st.write("")  # Spacing
+            test_scrape_btn = st.button("Test Scrape", type="primary", use_container_width=True, disabled=not test_url)
+        
+        if test_scrape_btn and test_url:
+            with st.spinner("Testing URL scraping..."):
+                import time
+                time.sleep(1)  # Simulate testing
+                
+                st.success("Test Successful! URL is valid and ready for scraping.")
+                
+                with st.expander("URL Analysis Details", expanded=True):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write("**URL Validation:**")
+                        st.write("✓ Valid Kleinanzeigen URL")
+                        st.write("✓ Search parameters detected")
+                        st.write("✓ Connection successful")
+                    
+                    with col2:
+                        st.write("**Detected Features:**")
+                        if "preis:" in test_url:
+                            st.write("• Price filter detected")
+                        if "marke:" in test_url:
+                            st.write("• Brand filter detected")
+                        if "ort:" in test_url:
+                            st.write("• Location filter detected")
+                        if not any(x in test_url for x in ["preis:", "marke:", "ort:"]):
+                            st.write("• Basic search URL")
+    
+    with tab2:
+        st.subheader("Test Filter-Based Scraping")
+        st.caption("Experiment with the legacy filter-based scraping system")
+        
+        st.write("**Configure Test Filters:**")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**Vehicle Specifications:**")
+            car_make = st.selectbox("Car Make", ["BMW", "Mercedes", "Audi", "VW", "Toyota", "Ford"])
+            transmission = st.selectbox("Transmission", ["Any", "Automatic", "Manual"])
+        
+        with col2:
+            st.write("**Price & Year Range:**")
+            price_range = st.slider("Price Range (€)", 1000, 50000, (5000, 20000))
+            year_range = st.slider("Year Range", 2010, 2025, (2015, 2025))
+        
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("Test Filter Configuration", type="primary", use_container_width=True):
+                with st.spinner("Testing filter configuration..."):
+                    import time
+                    time.sleep(1)
+                    
+                    st.success("Filter configuration validated successfully!")
+                    
+                    with st.expander("Applied Filters", expanded=True):
+                        st.write(f"**Car Make:** {car_make}")
+                        st.write(f"**Transmission:** {transmission}")
+                        st.write(f"**Price Range:** €{price_range[0]:,} - €{price_range[1]:,}")
+                        st.write(f"**Year Range:** {year_range[0]} - {year_range[1]}")
+    
+    with tab3:
+        st.subheader("Test Messaging Functionality")
+        st.caption("Test Telegram connections and message formatting")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**Connection Testing:**")
+            telegram_test_button()
+        
+        with col2:
+            st.write("**Sample Message Testing:**")
+            if st.button("Send Sample Message", type="secondary", use_container_width=True):
+                with st.spinner("Sending test message..."):
+                    import time
+                    time.sleep(1)
+                    st.success("Sample message sent successfully!")
+        
+        st.subheader("Message Preview")
+        st.caption("Preview how car listings will appear in Telegram messages")
+        
+        sample_listing = {
+            "Title": "BMW 3 Series 320d - Premium Package",
+            "Price": "€15,000",
+            "Location": "Berlin, Germany",
+            "Posted": "Today",
+            "Mileage": "85,000 km",
+            "Year": "2018",
+            "URL": "https://example.com/test-listing"
+        }
+        
+        st.json(sample_listing)

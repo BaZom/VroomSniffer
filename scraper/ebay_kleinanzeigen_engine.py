@@ -42,10 +42,75 @@ def fetch_listings_from_url(url):
         page = context.new_page()
         print(f"[*] Navigating to eBay Kleinanzeigen search page: {url}")
         page.goto(url, wait_until="networkidle")
-        page.wait_for_selector(".aditem")
-        listings = page.query_selector_all(".aditem")
-        print(f"[*] Found {len(listings)} listings")
-        parsed = [parse_listing(item) for item in listings]
+        
+        # Try different selectors and handle no results gracefully
+        listings = []
+        try:
+            # First check if there's a "no results" message or if page loaded properly
+            page.wait_for_load_state("networkidle", timeout=30000)
+            
+            # Check for no results message first
+            no_results_selectors = [
+                "text=Keine Anzeigen gefunden",
+                "text=Es wurden keine Anzeigen gefunden", 
+                ".messagebox--alert",
+                ".search-results-error",
+                "[data-testid='no-results']"
+            ]
+            
+            has_no_results = False
+            for selector in no_results_selectors:
+                try:
+                    if page.locator(selector).is_visible(timeout=2000):
+                        print(f"[!] No results found for this search")
+                        has_no_results = True
+                        break
+                except:
+                    continue
+            
+            if has_no_results:
+                return []
+            
+            # Wait for listings to load but with shorter timeout
+            try:
+                page.wait_for_selector(".aditem", timeout=15000)
+                listings = page.query_selector_all(".aditem")
+            except:
+                # If .aditem not found, try alternative selectors
+                alternative_selectors = [".ad-listitem", ".aditem-main", ".adlist .aditem"]
+                for selector in alternative_selectors:
+                    try:
+                        page.wait_for_selector(selector, timeout=5000)
+                        listings = page.query_selector_all(selector)
+                        if listings:
+                            break
+                    except:
+                        continue
+            print(f"[*] Found {len(listings)} listings")
+        except Exception as e:
+            print(f"[!] No listings found with .aditem selector, trying alternatives...")
+            # Try alternative selectors
+            alternative_selectors = [
+                "[data-testid='result-item']",
+                ".ad-listitem",
+                ".aditem-main",
+                ".result-item"
+            ]
+            
+            for selector in alternative_selectors:
+                try:
+                    page.wait_for_selector(selector, timeout=10000)
+                    listings = page.query_selector_all(selector)
+                    if listings:
+                        print(f"[*] Found {len(listings)} listings with selector: {selector}")
+                        break
+                except:
+                    continue
+            
+            if not listings:
+                print("[!] No listings found with any selector - possibly no results for this search")
+                
+        parsed = [parse_listing(item) for item in listings] if listings else []
         context.close()
         browser.close()
     return [l for l in parsed if l]

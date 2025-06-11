@@ -1,6 +1,7 @@
 """
-Service layer for caralyze: handles scraping, caching, price extraction, filter key logic, and notifications.
-This is the main interface between UI and backend logic (scraper, notifications, proxy, etc).
+Caralyze Caching Service - URL-based caching system for car listings.
+Handles scraping, URL-based caching, and cache management operations.
+This is the main interface between UI and caching logic.
 """
 import sys
 import json
@@ -13,29 +14,89 @@ from pathlib import Path
 # Add parent directory for imports
 sys.path.append(str(Path(__file__).parent.parent))
 
-def get_filter_key(filters):
-    def safe(val):
-        if isinstance(val, (tuple, list)):
-            return '-'.join(str(x) for x in val)
-        return str(val).lower().replace(' ', '_') if val else 'any'
-    return '_'.join([
-        safe(filters.get('car_make')),
-        safe(filters.get('car_model')),
-        safe(filters.get('price_range')),
-        safe(filters.get('year_range')),
-        safe(filters.get('transmission')),
-        safe(filters.get('max_mileage'))
-    ])
+# === URL-BASED CACHING SYSTEM ===
 
-def load_json_dict(path):
-    if Path(path).exists():
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+def load_cache(cache_path):
+    """Load cached listings as URL-indexed dictionary"""
+    if Path(cache_path).exists():
+        with open(cache_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            # Handle both old filter-based format and new URL-based format
+            if isinstance(data, dict) and data:
+                first_key = next(iter(data.keys()))
+                if first_key.startswith('http'):
+                    return data  # Already URL-based
+                # Convert old format to URL-based
+                url_cache = {}
+                for filter_listings in data.values():
+                    if isinstance(filter_listings, list):
+                        for listing in filter_listings:
+                            if listing.get("URL"):
+                                url_cache[listing["URL"]] = listing
+                return url_cache
     return {}
 
-def save_json_dict(data, path):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+def save_cache(cache_dict, cache_path):
+    """Save URL-indexed cache dictionary"""
+    Path(cache_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(cache_path, "w", encoding="utf-8") as f:
+        json.dump(cache_dict, f, ensure_ascii=False, indent=2)
+
+def is_listing_cached(url, cache_path):
+    """Check if a listing URL exists in cache"""
+    cache = load_cache(cache_path)
+    return url in cache
+
+def add_listing_to_cache(listing, cache_path):
+    """Add a single listing to cache"""
+    url = listing.get("URL")
+    if not url:
+        return False
+    
+    cache = load_cache(cache_path)
+    cache[url] = listing
+    save_cache(cache, cache_path)
+    return True
+
+def remove_listing_from_cache(url, cache_path):
+    """Remove a listing from cache by URL"""
+    cache = load_cache(cache_path)
+    if url in cache:
+        del cache[url]
+        save_cache(cache, cache_path)
+        return True
+    return False
+
+def get_cached_listing(url, cache_path):
+    """Get a specific listing from cache by URL"""
+    cache = load_cache(cache_path)
+    return cache.get(url)
+
+def get_all_cached_listings(cache_path):
+    """Get all cached listings as a list"""
+    cache = load_cache(cache_path)
+    return list(cache.values())
+
+def clear_cache(cache_path):
+    """Clear all cached listings"""
+    save_cache({}, cache_path)
+    return True
+
+def get_cache_stats(cache_path):
+    """Get cache statistics"""
+    cache = load_cache(cache_path)
+    
+    # Calculate file size if cache file exists
+    file_size = 0
+    if Path(cache_path).exists():
+        file_size = Path(cache_path).stat().st_size
+    
+    return {
+        "total_listings": len(cache),
+        "urls": list(cache.keys()),
+        "cache_size": file_size,
+        "cache_size_mb": round(file_size / (1024 * 1024), 2) if file_size > 0 else 0
+    }
 
 def run_scraper_and_load_results(filters, build_search_url_ui, root_dir):
     """
@@ -47,8 +108,11 @@ def run_scraper_and_load_results(filters, build_search_url_ui, root_dir):
     try:
         if filters and filters.get("custom_url"):
             url = filters["custom_url"]
+            print(f"[DEBUG] Using custom URL: {url}")
         else:
             url = build_search_url_ui(filters)
+            print(f"[DEBUG] Generated URL from filters: {url}")
+            print(f"[DEBUG] Filters used: {filters}")
         args = [sys.executable, str(Path(root_dir) / "scraper" / "ebay_kleinanzeigen_engine.py"), "--url", url]
         result = subprocess.run(
             args,
@@ -59,19 +123,30 @@ def run_scraper_and_load_results(filters, build_search_url_ui, root_dir):
             if json_path.exists():
                 with open(json_path, "r", encoding="utf-8") as f:
                     listings_data = json.load(f)
+                    if not listings_data:
+                        print(f"[INFO] No listings found for search URL: {url}")
+            else:
+                print(f"[WARNING] Scraper completed but no results file found")
+                listings_data = []
         else:
-            raise RuntimeError(f"Scraper error: {result.stderr}")
+            print(f"[WARNING] Scraper failed: {result.stderr}")
+            print(f"[WARNING] Search URL was: {url}")
+            # Don't raise error, return empty list to continue with cached data
+            listings_data = []
     except Exception as e:
-        raise RuntimeError(f"Error during scraping: {str(e)}")
+        print(f"[WARNING] Scraping error: {str(e)}")
+        print(f"[WARNING] Search URL was: {url if 'url' in locals() else 'Unknown'}")
+        # Don't raise error, return empty list to continue with cached data
+        listings_data = []
     return listings_data
 
 def get_listings_for_filter(filters, all_old_path, latest_new_path, build_search_url_ui, root_dir):
     """
-    Get all listings and new listings for the given filters by running the scraper
-    and comparing with previously stored listings.
+    Get all listings and new listings by running the scraper and comparing with cached listings.
+    Now uses URL-based caching instead of filter-based.
     
     Args:
-        filters: Dictionary containing search filters
+        filters: Dictionary containing search filters (or custom_url)
         all_old_path: Path to the JSON file storing all previously seen listings
         latest_new_path: Path to the JSON file storing latest new listings
         build_search_url_ui: Function to build search URL from filters
@@ -80,21 +155,39 @@ def get_listings_for_filter(filters, all_old_path, latest_new_path, build_search
     Returns:
         Tuple of (all_listings, new_listings)
     """
-    filter_key = get_filter_key(filters)
+    # Run scraper to get fresh listings
     listings_data = run_scraper_and_load_results(filters, build_search_url_ui, root_dir)
-    old_dict = load_json_dict(all_old_path)
-    old_listings = old_dict.get(filter_key, [])
-    old_urls = set(l["URL"] for l in old_listings)
-    new_listings = [l for l in listings_data if l["URL"] not in old_urls]
-    merged_listings = old_listings + [l for l in listings_data if l["URL"] not in old_urls]
-    old_dict[filter_key] = merged_listings
-    save_json_dict(old_dict, all_old_path)
-    new_dict = load_json_dict(latest_new_path)
-    new_dict[filter_key] = new_listings
-    save_json_dict(new_dict, latest_new_path)
-    return merged_listings, new_listings
+    
+    # Load existing cached listings (URL-based)
+    cached_listings = load_cache(all_old_path)
+    
+    # Identify new listings by URL
+    new_listings = []
+    all_listings = []
+    
+    for listing in listings_data:
+        url = listing.get("URL")
+        if not url:
+            continue  # Skip listings without URL
+            
+        if url not in cached_listings:
+            # This is a new listing
+            new_listings.append(listing)
+            cached_listings[url] = listing
+        
+        all_listings.append(listing)
+    
+    # Save updated cache
+    save_cache(cached_listings, all_old_path)
+    
+    # Save new listings for this run
+    new_listings_dict = {listing["URL"]: listing for listing in new_listings if listing.get("URL")}
+    save_cache(new_listings_dict, latest_new_path)
+    
+    return all_listings, new_listings
 
 def extract_prices(listings):
+    """Extract prices from listings for statistics"""
     prices = []
     for item in listings:
         price_str = item.get("Price", "").replace(".", "").replace(",", "").replace("€", "").strip()
@@ -103,140 +196,124 @@ def extract_prices(listings):
             prices.append(int(match.group()))
     return prices
 
-def send_new_listing_notifications(new_listings, filters=None, max_count=5):
-    """
-    Send Telegram notifications for new listings
-    
-    Args:
-        new_listings (list): List of new car listings
-        filters (dict): Optional filter information for context
-        max_count (int): Maximum number of notifications to send
-        
-    Returns:
-        dict: Summary of notification results
-    """
-    try:
-        from notifier.telegram import send_telegram_message, format_car_listing_message
-        
-        if not new_listings:
-            return {"success": False, "message": "No new listings to notify", "sent": 0}
-        
-        # Send summary first
-        summary_msg = f"🚗 <b>New Car Findings!</b>\n\n"
-        summary_msg += f"🆕 Found {len(new_listings)} new listings\n"
-        
-        if filters:
-            summary_msg += f"🔍 Search: {filters.get('car_make', 'Any')} {filters.get('car_model', '')}\n"
-            if filters.get('price_range'):
-                min_price, max_price = filters['price_range']
-                summary_msg += f"💰 Budget: €{min_price:,} - €{max_price:,}\n"
-        
-        # Calculate average price
-        prices = extract_prices(new_listings)
-        if prices:
-            avg_price = int(sum(prices) / len(prices))
-            summary_msg += f"📊 Average price: €{avg_price:,}\n"
-        
-        summary_msg += f"\n🔔 Sending top {min(max_count, len(new_listings))} listings..."
-        
-        success = send_telegram_message(summary_msg)
-        if not success:
-            return {"success": False, "message": "Failed to send summary", "sent": 0}
-        
-        # Send individual listings
-        sent_count = 0
-        for i, listing in enumerate(new_listings[:max_count]):
-            formatted_msg = format_car_listing_message(listing)
-            success = send_telegram_message(formatted_msg)
-            if success:
-                sent_count += 1
-              # Rate limiting
-            if i < min(max_count, len(new_listings)) - 1:
-                time.sleep(1.5)  # 1.5 second delay between messages
-        
-        return {
-            "success": True, 
-            "message": f"Successfully sent {sent_count}/{min(max_count, len(new_listings))} notifications",
-            "sent": sent_count,
-            "total_new": len(new_listings)
-        }
-        
-    except ImportError:
-        return {"success": False, "message": "Telegram notifier not available", "sent": 0}
-    except Exception as e:
-        return {"success": False, "message": f"Notification error: {str(e)}", "sent": 0}
+# === END OF CACHING SERVICE FUNCTIONS ===
 
-def send_monitoring_summary(all_listings, new_listings, filters=None):
+def remove_listings_by_ids(listing_urls, cache_path):
+    """Remove multiple listings from cache by their URLs"""
+    cache = load_cache(cache_path)
+    removed_count = 0
+    
+    for url in listing_urls:
+        if url in cache:
+            del cache[url]
+            removed_count += 1
+    
+    save_cache(cache, cache_path)
+    return removed_count
+
+def clear_all_caches(root_dir=None):
     """
-    Send a monitoring summary via Telegram
+    Clear all cache files and remove old listings.
     
     Args:
-        all_listings (list): All listings found
-        new_listings (list): New listings only
-        filters (dict): Optional filter information
+        root_dir: Root directory of the project (optional, defaults to current working directory)
         
     Returns:
-        bool: Success status
+        dict: Summary of what was cleared
     """
-    try:
-        from notifier.telegram import send_telegram_message
+    if root_dir is None:
+        root_dir = Path.cwd()
+    else:
+        root_dir = Path(root_dir)
+    
+    cleared_files = []
+    errors = []
+    
+    # List of cache files to clear
+    cache_files = [
+        "storage/listings/all_old_results.json",
+        "storage/listings/latest_new_results.json", 
+        "scraper/latest_results.json",
+        "cli/data/all_old_results.json",
+        "cli/data/latest_new_results.json",
+        "cli/data/latest_results.json"
+    ]
+    
+    for cache_file in cache_files:
+        file_path = root_dir / cache_file
+        try:
+            if file_path.exists():
+                # Clear the file by writing empty dict or list
+                if "latest_results.json" in cache_file:
+                    # This is scraped results, write empty list
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        json.dump([], f, ensure_ascii=False, indent=2)
+                else:
+                    # This is cache file, write empty dict
+                    save_cache({}, str(file_path))
+                cleared_files.append(str(file_path))
+        except Exception as e:
+            errors.append(f"Error clearing {file_path}: {str(e)}")
+    
+    return {
+        "cleared_files": cleared_files,
+        "errors": errors,
+        "total_cleared": len(cleared_files),
+        "message": f"Successfully cleared {len(cleared_files)} cache files"
+    }
+
+def get_listings_by_search_criteria(cache_path, search_term=None, min_price=None, max_price=None):
+    """
+    Search cached listings by criteria
+    
+    Args:
+        cache_path: Path to cache file
+        search_term: Search in title/location (optional)
+        min_price: Minimum price filter (optional) 
+        max_price: Maximum price filter (optional)
         
-        summary_msg = f"📊 <b>Caralyze Monitoring Report</b>\n\n"
-        summary_msg += f"📈 Total listings: {len(all_listings)}\n"
-        summary_msg += f"🆕 New findings: {len(new_listings)}\n"
-        
-        # Price analysis
-        if all_listings:
-            all_prices = extract_prices(all_listings)
-            if all_prices:
-                avg_all = int(sum(all_prices) / len(all_prices))
-                summary_msg += f"💰 Average price: €{avg_all:,}\n"
-                summary_msg += f"📉 Lowest: €{min(all_prices):,}\n"
-                summary_msg += f"📈 Highest: €{max(all_prices):,}\n"
-        
-        if new_listings:
-            new_prices = extract_prices(new_listings)
-            if new_prices:
-                avg_new = int(sum(new_prices) / len(new_prices))
-                summary_msg += f"🆕 New avg: €{avg_new:,}\n"
-        
-        # Search context
-        if filters:
-            summary_msg += f"\n🔍 <b>Search Details:</b>\n"
-            summary_msg += f"Car: {filters.get('car_make', 'Any')} {filters.get('car_model', '')}\n"
-            if filters.get('price_range'):
-                min_price, max_price = filters['price_range']
-                summary_msg += f"Budget: €{min_price:,} - €{max_price:,}\n"
-            if filters.get('year_range'):
-                min_year, max_year = filters['year_range']
-                summary_msg += f"Year: {min_year} - {max_year}\n"
-        
-        summary_msg += f"\n⏰ Report generated at {datetime.now().strftime('%H:%M:%S')}"
-        
-        return send_telegram_message(summary_msg)
-        
-    except ImportError:
-        print("[!] Telegram notifier not available")
-        return False
-    except Exception as e:
-        print(f"[!] Error sending monitoring summary: {e}")
-        return False
+    Returns:
+        list: Filtered listings
+    """
+    cache = load_cache(cache_path)
+    listings = list(cache.values())
+    
+    if not listings:
+        return []
+    
+    filtered = listings
+    
+    # Filter by search term
+    if search_term:
+        search_term = search_term.lower()
+        filtered = [l for l in filtered if 
+                   search_term in l.get("Title", "").lower() or 
+                   search_term in l.get("Location", "").lower()]
+      # Filter by price range
+    if min_price is not None or max_price is not None:
+        price_filtered = []
+        for listing in filtered:
+            price_str = listing.get("Price", "").replace(".", "").replace(",", "").replace("€", "").strip()
+            match = re.search(r"\d+", price_str)
+            if match:
+                price = int(match.group())
+                if min_price is not None and price < min_price:
+                    continue
+                if max_price is not None and price > max_price:
+                    continue
+                price_filtered.append(listing)
+        filtered = price_filtered
+    
+    return filtered
 
 def show_statistics(listings_data):
     """Calculate statistics for listings (average price, count, price list)."""
-    import re
-    prices = []
-    for item in listings_data:
-        price_str = item.get("Price", "").replace(".", "").replace(",", "").replace("€", "").strip()
-        match = re.search(r"\d+", price_str)
-        if match:
-            prices.append(int(match.group()))
+    prices = extract_prices(listings_data)
     avg_price = int(sum(prices) / len(prices)) if prices else 0
     return avg_price, len(listings_data), prices
 
 def manual_send_listings(listings, send_telegram_message, format_car_listing_message, parse_mode="HTML", retry_on_network_error=True):
     """Send listings to Telegram, retrying once on network error. Returns (success_count, failed_list)."""
-    import time
     success_count = 0
     failed = []
     for i, listing in enumerate(listings):
@@ -257,11 +334,3 @@ def manual_send_listings(listings, send_telegram_message, format_car_listing_mes
         if i < len(listings) - 1:
             time.sleep(1.5)  # Rate limiting
     return success_count, failed
-
-# --- End of business logic and service functions ---
-
-# The following functions are for use by the UI layer (e.g., Streamlit) and should not contain UI code themselves.
-# All UI rendering should be handled in the UI modules (e.g., ui/streamlit_app.py).
-
-# If you want to further split this file, consider moving notification-related functions to a new file, e.g., services/notification_service.py
-# and scraping-related functions to services/scraping_service.py
