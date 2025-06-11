@@ -17,12 +17,6 @@ A modern, modular web scraping system designed to collect car listings from eBay
 
 ### 1. Installation
 
-**Clone the repository:**
-```bash
-git clone <your-repository-url>
-cd car_scraper
-```
-
 **Create virtual environment:**
 ```bash
 # Windows
