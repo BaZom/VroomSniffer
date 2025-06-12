@@ -17,31 +17,166 @@ def main():
         page_title="CarAlyze - Car Monitor", 
         page_icon="🚗", 
         layout="wide",
-        initial_sidebar_state="expanded"
-    )      # Clean CSS styling
-    clean_css = """    <style>
+        initial_sidebar_state="expanded"    )      # Clean gray, black & white styling
+    clean_css = """
+    <style>
     /* Hide Streamlit's default elements */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
-    .css-1d391kg {padding-top: 1rem;}
     
-    /* Clean styling */
-    .main > div {
+    /* Background and main styling */
+    .stApp {
+        background-color: #f0f0f0;
+    }
+    
+    .main .block-container {
+        background-color: white;
         padding: 2rem;
-        max-width: 1200px;
+        border-radius: 8px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+        margin: 1rem auto;
+        border: 1px solid #d0d0d0;
+    }    /* Sidebar styling - lighter gray theme */
+    .css-1d391kg, .css-6qob1r, .css-17eq0hr, [data-testid="stSidebar"] {
+        background-color: #404040 !important;
+        padding-top: 1rem;
     }
     
-    /* Simple button styling */
+    .sidebar .sidebar-content, [data-testid="stSidebar"] > div {
+        background-color: #404040 !important;
+    }
+    
+    /* More specific sidebar background */
+    section[data-testid="stSidebar"] {
+        background-color: #404040 !important;
+    }
+    
+    section[data-testid="stSidebar"] > div {
+        background-color: #404040 !important;
+    }
+    
+    /* Sidebar text colors */
+    .css-1d391kg h1, .css-1d391kg h2, .css-1d391kg h3,
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+        color: #ffffff !important;
+    }
+    
+    .css-1d391kg .stMarkdown p, [data-testid="stSidebar"] .stMarkdown p {
+        color: #e0e0e0 !important;
+    }
+    
+    .css-1d391kg .stCaption, [data-testid="stSidebar"] .stCaption {
+        color: #b0b0b0 !important;
+    }
+    
+    /* Main content button styling */
     .stButton > button {
-        border-radius: 5px;
-        border: 1px solid #ddd;
-        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        border: 1px solid #666666;
+        background-color: white;
+        color: #333333;
+        font-weight: 500;
+        transition: all 0.2s ease;
     }
     
-    /* Clean text input */
+    .stButton > button:hover {
+        background-color: #f8f8f8;
+        border-color: #333333;
+    }
+    
+    /* Primary button styling for main content */
+    .stButton > button[kind="primary"] {
+        background-color: #333333;
+        color: white;
+        border-color: #333333;
+    }
+    
+    .stButton > button[kind="primary"]:hover {
+        background-color: #555555;
+        border-color: #555555;
+    }    /* Sidebar buttons - adjusted for lighter gray theme */
+    .css-1d391kg .stButton > button, [data-testid="stSidebar"] .stButton > button {
+        background-color: #505050 !important;
+        color: #ffffff !important;
+        border-color: #666666 !important;
+        border-radius: 6px !important;
+    }
+    
+    .css-1d391kg .stButton > button:hover, [data-testid="stSidebar"] .stButton > button:hover {
+        background-color: #606060 !important;
+        border-color: #777777 !important;
+    }
+    
+    .css-1d391kg .stButton > button[kind="primary"], [data-testid="stSidebar"] .stButton > button[kind="primary"] {
+        background-color: #777777 !important;
+        color: #ffffff !important;
+        border-color: #999999 !important;
+    }
+      .css-1d391kg .stButton > button[kind="primary"]:hover, [data-testid="stSidebar"] .stButton > button[kind="primary"]:hover {
+        background-color: #888888 !important;
+        border-color: #aaaaaa !important;
+    }
+    
+    /* Text input styling */
     .stTextInput > div > div > input {
-        border-radius: 5px;
+        border-radius: 6px;
+        border: 1px solid #cccccc;
+        background-color: white;
+    }
+    
+    .stTextInput > div > div > input:focus {
+        border-color: #666666;
+        box-shadow: 0 0 0 1px #666666;
+    }
+    
+    /* Metrics styling */
+    [data-testid="metric-container"] {
+        background-color: #f8f8f8 !important;
+        border: 1px solid #e0e0e0 !important;
+        border-radius: 6px !important;
+        padding: 1rem !important;
+    }
+    
+    /* Alert styling */
+    .stSuccess {
+        background-color: #f8f8f8 !important;
+        border-left: 4px solid #666666 !important;
+        color: #333333 !important;
+    }
+    
+    .stInfo {
+        background-color: #f8f8f8 !important;
+        border-left: 4px solid #999999 !important;
+        color: #333333 !important;
+    }
+    
+    .stWarning {
+        background-color: #f8f8f8 !important;
+        border-left: 4px solid #777777 !important;
+        color: #333333 !important;
+    }
+    
+    .stError {
+        background-color: #f8f8f8 !important;
+        border-left: 4px solid #555555 !important;
+        color: #333333 !important;
+    }
+    
+    /* Dataframe styling */
+    .stDataFrame {
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+    }
+    
+    /* Headers */
+    h1, h2, h3 {
+        color: #333333 !important;
+    }
+    
+    /* Divider */
+    hr {
+        border-color: #e0e0e0;
     }
     </style>
     """

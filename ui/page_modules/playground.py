@@ -95,34 +95,77 @@ def show_playground_page(all_old_path, latest_new_path, root_dir):
                         st.write(f"**Year Range:** {year_range[0]} - {year_range[1]}")
     
     with tab3:
-        st.subheader("Test Messaging Functionality")
-        st.caption("Test Telegram connections and message formatting")
+        st.subheader("Test Telegram Messages")
+        st.caption("Test Telegram bot connectivity and message formatting")
+        
+        # Telegram test button moved from main scraper
+        telegram_test_button()
+        
+        st.write("---")
+        
+        # Additional message testing options
+        st.write("**Message Format Testing:**")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            st.write("**Connection Testing:**")
-            telegram_test_button()
+            test_message = st.text_area(
+                "Custom Test Message",
+                placeholder="Enter a custom message to test...",
+                height=100
+            )
         
         with col2:
-            st.write("**Sample Message Testing:**")
-            if st.button("Send Sample Message", type="secondary", use_container_width=True):
+            if st.button("📤 Send Test Message", use_container_width=True, disabled=not test_message):
                 with st.spinner("Sending test message..."):
-                    import time
-                    time.sleep(1)
-                    st.success("Sample message sent successfully!")
+                    # Import here to avoid circular imports
+                    from notifier.telegram import send_telegram_message
+                    try:
+                        send_telegram_message(test_message)
+                        st.success("✅ Test message sent successfully!")
+                    except Exception as e:
+                        st.error(f"❌ Failed to send message: {str(e)}")
         
-        st.subheader("Message Preview")
-        st.caption("Preview how car listings will appear in Telegram messages")
+        st.write("**Quick Test Messages:**")
         
-        sample_listing = {
-            "Title": "BMW 3 Series 320d - Premium Package",
-            "Price": "€15,000",
-            "Location": "Berlin, Germany",
-            "Posted": "Today",
-            "Mileage": "85,000 km",
-            "Year": "2018",
-            "URL": "https://example.com/test-listing"
-        }
+        col1, col2, col3 = st.columns(3)
         
-        st.json(sample_listing)
+        with col1:
+            if st.button("🚗 Car Listing Test", use_container_width=True):
+                test_car_message = """
+🚗 **Test Car Listing**
+💰 Price: €15,000
+📍 Location: Berlin
+📅 Year: 2018
+🛣️ KM: 75,000
+⛽ Fuel: Benzin
+🔗 [View Listing](https://example.com)
+                """
+                try:
+                    from notifier.telegram import send_telegram_message
+                    send_telegram_message(test_car_message, parse_mode="Markdown")
+                    st.success("✅ Car listing test sent!")
+                except Exception as e:
+                    st.error(f"❌ Failed: {str(e)}")
+        
+        with col2:
+            if st.button("📊 Status Test", use_container_width=True):
+                status_message = "🤖 CarAlyze Bot Status Test\n✅ All systems operational"
+                try:
+                    from notifier.telegram import send_telegram_message
+                    send_telegram_message(status_message)
+                    st.success("✅ Status test sent!")
+                except Exception as e:
+                    st.error(f"❌ Failed: {str(e)}")
+        
+        with col3:
+            if st.button("🚨 Alert Test", use_container_width=True):
+                alert_message = "🚨 TEST ALERT\nThis is a test alert message from CarAlyze playground."
+                try:
+                    from notifier.telegram import send_telegram_message
+                    send_telegram_message(alert_message)
+                    st.success("✅ Alert test sent!")
+                except Exception as e:
+                    st.error(f"❌ Failed: {str(e)}")
+
+    # ...existing code...
