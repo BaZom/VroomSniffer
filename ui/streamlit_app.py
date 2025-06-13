@@ -17,13 +17,19 @@ def main():
         page_title="CarAlyze - Car Monitor", 
         page_icon="🚗", 
         layout="wide",
-        initial_sidebar_state="expanded"    )      # Clean gray, black & white styling
+        initial_sidebar_state="expanded"    )
+      # Simplified CSS - focusing on essential styling only
     clean_css = """
     <style>
     /* Hide Streamlit's default elements */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
+    
+    /* Hide Streamlit's automatic navigation links */
+    [data-testid="stSidebarNavLink"] {
+        display: none !important;
+    }
     
     /* Background and main styling */
     .stApp {
@@ -37,37 +43,55 @@ def main():
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
         margin: 1rem auto;
         border: 1px solid #d0d0d0;
-    }    /* Sidebar styling - lighter gray theme */
-    .css-1d391kg, .css-6qob1r, .css-17eq0hr, [data-testid="stSidebar"] {
-        background-color: #404040 !important;
-        padding-top: 1rem;
     }
     
-    .sidebar .sidebar-content, [data-testid="stSidebar"] > div {
+    /* Sidebar styling - simplified and focused */
+    [data-testid="stSidebar"] {
         background-color: #404040 !important;
     }
     
-    /* More specific sidebar background */
-    section[data-testid="stSidebar"] {
-        background-color: #404040 !important;
-    }
-    
-    section[data-testid="stSidebar"] > div {
+    [data-testid="stSidebar"] > div {
         background-color: #404040 !important;
     }
     
     /* Sidebar text colors */
-    .css-1d391kg h1, .css-1d391kg h2, .css-1d391kg h3,
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+    [data-testid="stSidebar"] h1, 
+    [data-testid="stSidebar"] h2, 
+    [data-testid="stSidebar"] h3 {
         color: #ffffff !important;
     }
     
-    .css-1d391kg .stMarkdown p, [data-testid="stSidebar"] .stMarkdown p {
+    [data-testid="stSidebar"] .stMarkdown p {
         color: #e0e0e0 !important;
     }
     
-    .css-1d391kg .stCaption, [data-testid="stSidebar"] .stCaption {
+    [data-testid="stSidebar"] .stCaption {
         color: #b0b0b0 !important;
+    }
+    
+    /* Sidebar buttons */
+    [data-testid="stSidebar"] .stButton > button {
+        background-color: #505050 !important;
+        color: #ffffff !important;
+        border-color: #666666 !important;
+        border-radius: 6px !important;
+        font-weight: 500 !important;
+    }
+    
+    [data-testid="stSidebar"] .stButton > button:hover {
+        background-color: #606060 !important;
+        border-color: #777777 !important;
+    }
+    
+    [data-testid="stSidebar"] .stButton > button[kind="primary"] {
+        background-color: #777777 !important;
+        color: #ffffff !important;
+        border-color: #999999 !important;
+    }
+    
+    [data-testid="stSidebar"] .stButton > button[kind="primary"]:hover {
+        background-color: #888888 !important;
+        border-color: #aaaaaa !important;
     }
     
     /* Main content button styling */
@@ -85,7 +109,6 @@ def main():
         border-color: #333333;
     }
     
-    /* Primary button styling for main content */
     .stButton > button[kind="primary"] {
         background-color: #333333;
         color: white;
@@ -95,27 +118,6 @@ def main():
     .stButton > button[kind="primary"]:hover {
         background-color: #555555;
         border-color: #555555;
-    }    /* Sidebar buttons - adjusted for lighter gray theme */
-    .css-1d391kg .stButton > button, [data-testid="stSidebar"] .stButton > button {
-        background-color: #505050 !important;
-        color: #ffffff !important;
-        border-color: #666666 !important;
-        border-radius: 6px !important;
-    }
-    
-    .css-1d391kg .stButton > button:hover, [data-testid="stSidebar"] .stButton > button:hover {
-        background-color: #606060 !important;
-        border-color: #777777 !important;
-    }
-    
-    .css-1d391kg .stButton > button[kind="primary"], [data-testid="stSidebar"] .stButton > button[kind="primary"] {
-        background-color: #777777 !important;
-        color: #ffffff !important;
-        border-color: #999999 !important;
-    }
-      .css-1d391kg .stButton > button[kind="primary"]:hover, [data-testid="stSidebar"] .stButton > button[kind="primary"]:hover {
-        background-color: #888888 !important;
-        border-color: #aaaaaa !important;
     }
     
     /* Text input styling */
@@ -138,37 +140,6 @@ def main():
         padding: 1rem !important;
     }
     
-    /* Alert styling */
-    .stSuccess {
-        background-color: #f8f8f8 !important;
-        border-left: 4px solid #666666 !important;
-        color: #333333 !important;
-    }
-    
-    .stInfo {
-        background-color: #f8f8f8 !important;
-        border-left: 4px solid #999999 !important;
-        color: #333333 !important;
-    }
-    
-    .stWarning {
-        background-color: #f8f8f8 !important;
-        border-left: 4px solid #777777 !important;
-        color: #333333 !important;
-    }
-    
-    .stError {
-        background-color: #f8f8f8 !important;
-        border-left: 4px solid #555555 !important;
-        color: #333333 !important;
-    }
-    
-    /* Dataframe styling */
-    .stDataFrame {
-        border: 1px solid #e0e0e0;
-        border-radius: 6px;
-    }
-    
     /* Headers */
     h1, h2, h3 {
         color: #333333 !important;
@@ -187,29 +158,36 @@ def main():
     listings_dir = root_dir / "storage" / "listings"
     listings_dir.mkdir(parents=True, exist_ok=True)
     all_old_path = listings_dir / "all_old_results.json"
-    latest_new_path = listings_dir / "latest_new_results.json"    # Initialize page state
+    latest_new_path = listings_dir / "latest_new_results.json"    # Initialize session state
     if 'current_page' not in st.session_state:
         st.session_state.current_page = "🏠 Home"
-      # Clean sidebar navigation
+    
+    # Sidebar navigation
     with st.sidebar:
         st.title("CarAlyze")
         st.caption("Car Monitoring System")
         st.divider()
         
-        # Simple navigation buttons
-        pages = [
-            ("Home", "🏠 Home"),
-            ("Scraper", "🔍 Scraper"),
-            ("Data Storage", "📊 Data Storage"),
-            ("Playground", "🎮 Playground")
-        ]
-        
-        for page_name, page_key in pages:
-            is_current = st.session_state.current_page == page_key
-            if st.button(page_name, key=f"nav_{page_key}", use_container_width=True, 
-                        type="primary" if is_current else "secondary"):
-                st.session_state.current_page = page_key
-                st.rerun()
+        # Navigation buttons
+        if st.button("🏠 Home", key="nav_home", use_container_width=True, 
+                    type="primary" if st.session_state.current_page == "🏠 Home" else "secondary"):
+            st.session_state.current_page = "🏠 Home"
+            st.rerun()
+            
+        if st.button("🔍 Scraper", key="nav_scraper", use_container_width=True, 
+                    type="primary" if st.session_state.current_page == "� Scraper" else "secondary"):
+            st.session_state.current_page = "🔍 Scraper"
+            st.rerun()
+            
+        if st.button("📊 Data Storage", key="nav_data", use_container_width=True, 
+                    type="primary" if st.session_state.current_page == "📊 Data Storage" else "secondary"):
+            st.session_state.current_page = "📊 Data Storage"
+            st.rerun()
+            
+        if st.button("🎮 Playground", key="nav_playground", use_container_width=True, 
+                    type="primary" if st.session_state.current_page == "🎮 Playground" else "secondary"):
+            st.session_state.current_page = "🎮 Playground"
+            st.rerun()
         
         st.divider()
         st.caption("CarAlyze v2.0")

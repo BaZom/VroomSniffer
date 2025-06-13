@@ -20,7 +20,7 @@ def _show_system_status():
     """Display system status."""
     st.subheader("📊 Status")
     
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         status = "🟢 ACTIVE" if st.session_state.scraping_active else "🔴 STOPPED"
@@ -31,9 +31,6 @@ def _show_system_status():
     
     with col3:
         st.markdown(f'<div class="status-metric">🔄 {st.session_state.total_runs} Runs</div>', unsafe_allow_html=True)
-    
-    with col4:
-        st.session_state.auto_send_active = st.checkbox("📤 Auto-send", value=st.session_state.auto_send_active)
 
 def _display_url_pool():
     """Display current URL pool."""
@@ -223,16 +220,15 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
     _show_system_status()
     
     st.divider()
-    
-    # URL Management
+      # URL Management
     st.subheader("🔧 URL Management")
     
     new_url = st.text_input("Enter search URL:", placeholder="https://www.ebay-kleinanzeigen.de/...")
     
-    col1, col2, col3 = st.columns([1.5, 1, 2.5])
-    
+    # Adjacent buttons for Add URL and Clear Pool
+    col1, col2 = st.columns(2)
     with col1:
-        if st.button("Add URL", type="primary"):
+        if st.button("Add URL", type="primary", use_container_width=True):
             built_url = build_search_url_from_custom(new_url)
             if built_url and built_url not in st.session_state.url_pool:
                 st.session_state.url_pool.append(built_url)
@@ -244,23 +240,23 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
                 st.error("❌ Invalid URL")
     
     with col2:
-        if st.button("Clear Pool"):
+        if st.button("Clear Pool", use_container_width=True):
             st.session_state.url_pool = []
             st.session_state.scraping_active = False
             st.success("🧹 Pool cleared!")
-            st.rerun()    # URL Pool
+            st.rerun()# URL Pool
     _display_url_pool()
     
     st.divider()
-    
-    # Controls
+      # Controls
     st.subheader("⚙️ Controls")
     
-    col1, col2, col3, col4 = st.columns([1.2, 1.2, 0.6, 2])
+    # Adjacent buttons for Start/Stop and Auto-send toggle
+    col1, col2, col3 = st.columns([1.5, 1.5, 2])
     
     with col1:
         if not st.session_state.scraping_active:
-            if st.button("▶️ Start", type="primary"):
+            if st.button("▶️ Start", type="primary", use_container_width=True):
                 if st.session_state.url_pool:
                     st.session_state.scraping_active = True
                     st.session_state.last_scrape_time = 0
@@ -277,27 +273,15 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
                 else:
                     st.error("Add URLs first")
         else:
-            if st.button("⏹️ Stop"):
+            if st.button("⏹️ Stop", use_container_width=True):
                 st.session_state.scraping_active = False
                 st.success("⏹️ Stopped!")
                 st.rerun()
     
     with col2:
-        if not st.session_state.auto_send_active:
-            if st.button("📤 Enable Send"):
-                st.session_state.auto_send_active = True
-                st.success("📤 Enabled!")
-                st.rerun()
-        else:
-            if st.button("📤 Disable Send"):
-                st.session_state.auto_send_active = False
-                st.success("📤 Disabled!")
-                st.rerun()
+        st.session_state.auto_send_active = st.checkbox("📤 Auto-send to Telegram", value=st.session_state.auto_send_active)
     
     with col3:
-        st.write("")
-    
-    with col4:
         st.session_state.interval_seconds = st.number_input(
             "Interval (sec):", 
             min_value=30, 
