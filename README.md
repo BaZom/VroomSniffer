@@ -1,6 +1,12 @@
-# 🚗 VroomSniffer - Car Scraper System
+# 🚗 VroomSniffer - Car Monitoring System
 
-A modern, modular web scraping system designed to collect car listings from eBay Kleinanzeigen, detect new listings, and send notifications via Telegram. Built with Python, Playwright, and Streamlit.
+<div align="center">
+  <img src="ui/resources/logo7.png" alt="VroomSniffer Logo" width="300">
+</div>
+
+> **📝 Note: This is a hobby project created for educational and personal use only.**
+
+A modern, modular web scraping system designed to collect car listings from various online marketplaces, detect new listings, and send notifications via Telegram. Built with Python, Playwright, and Streamlit.
 
 ## ✨ Key Features
 
@@ -64,11 +70,11 @@ streamlit run ui/streamlit_app.py
 The CLI provides the primary interface for running the scraper and managing results:
 
 ```bash
-# Run the scraper with a Kleinanzeigen search URL
-python cli/main.py run "https://www.kleinanzeigen.de/s-autos/bmw/k0c216"
+# Run the scraper with a marketplace search URL
+python cli/main.py run "https://marketplace-url.com/search-cars"
 
 # Run with auto-notifications (sends new listings automatically)
-python scraper/ebay_kleinanzeigen_engine.py --url "..." --notify --notify-count 3
+python scraper/engine.py --url "..." --notify --notify-count 3
 
 # List the latest scraped listings
 python cli/main.py list
@@ -137,7 +143,7 @@ car_scraper/
 ├── ui/                     # Web interface
 │   └── streamlit_app.py    # Streamlit web app
 ├── scraper/                # Scraping engine
-│   └── ebay_kleinanzeigen_engine.py
+│   └── engine.py           # Main scraping engine
 ├── services/               # Business logic layer
 │   └── vroomsniffer_service.py
 ├── storage/                # Data persistence
@@ -235,6 +241,19 @@ The project follows a clean, modular architecture with separation of concerns:
 - **Import errors**: Ensure you're in the virtual environment and all dependencies are installed
 - **Scraping failures**: Check if the target website structure has changed
 - **Telegram not working**: Verify bot token and chat ID in the notifier configuration
+
+---
+
+## ⚠️ Disclaimer
+
+**This is a hobby project created for educational and personal use only.**
+
+- **Educational Purpose**: This project is intended for learning web scraping techniques and automation concepts
+- **Personal Use**: Use this tool responsibly and only for personal research and learning
+- **Respect Website Terms**: Always respect website terms of service and robots.txt files
+- **Rate Limiting**: Implement appropriate delays and respect server resources
+- **No Commercial Use**: This project is not intended for commercial or large-scale scraping operations
+- **User Responsibility**: Users are responsible for ensuring their usage complies with applicable laws and regulations
 
 ---
 

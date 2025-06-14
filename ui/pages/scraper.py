@@ -376,10 +376,13 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
                         all_old_path, 
                         latest_new_path,
                         build_search_url_from_custom,
-                        root_dir
-                    )
+                        root_dir                    )
                     
                     all_listings, new_listings = results
+                    
+                    # Play sound immediately when new listings are found
+                    if new_listings:
+                        play_sound("Sniff1.wav")
                     
                     st.session_state.latest_results = {
                         'all_listings': all_listings,
@@ -397,16 +400,16 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
                     st.session_state.total_runs += 1
                     st.session_state.last_scrape_time = current_time
                     st.session_state.current_url_index = current_url_index
-                    
-                    # Pre-select next URL
+                      # Pre-select next URL
                     if len(st.session_state.url_pool) > 1:
                         st.session_state.next_url_index = random.randint(0, len(st.session_state.url_pool) - 1)
                     else:
                         st.session_state.next_url_index = 0
-                    st.session_state.next_url_selected = True                    # Show results
+                    st.session_state.next_url_selected = True
+                    
+                    # Show results
                     if new_listings:
                         st.success(f"✅ Found {len(new_listings)} new listings!")
-                        play_sound("Sniff1.wav")  # Play sound when new listings found
                     else:
                         st.info("🔍 No new listings found")
                     
