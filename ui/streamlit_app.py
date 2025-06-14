@@ -212,15 +212,13 @@ def main():
         st.session_state.current_page = "🏠 Home"
     
     # Sidebar navigation
-    with st.sidebar:
-        # Add VroomSniffer logo
+    with st.sidebar:        # Add VroomSniffer logo
         try:
             st.image("ui/resources/logo6.png", width=200)
         except:
             # Fallback if logo not found
             st.title("VroomSniffer")
         
-        st.caption("Car Monitoring System")
         st.divider()
         
         # Navigation buttons
@@ -245,7 +243,7 @@ def main():
             st.rerun()
         
         st.divider()
-        st.caption("VroomSniffer v2.0")
+        st.caption("VroomSniffer v1.0")
     
     # Page routing
     if st.session_state.current_page == "🏠 Home":

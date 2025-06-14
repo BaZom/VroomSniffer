@@ -3,12 +3,38 @@ import sys
 from pathlib import Path
 import time
 import random
+import base64
 
 # Add the parent directory to the path so we can import from local modules
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from services.vroomsniffer_service import get_listings_for_filter, manual_send_listings
 from notifier.telegram import send_telegram_message, format_car_listing_message
+
+def play_sound(sound_file):
+    """Play a sound effect using Streamlit's audio component."""
+    try:
+        # Check if sound effects are enabled
+        if not st.session_state.get('sound_effects_enabled', True):
+            return
+            
+        sound_path = Path(__file__).parent.parent / "resources" / "sounds" / sound_file
+        if sound_path.exists():
+            with open(sound_path, "rb") as audio_file:
+                audio_bytes = audio_file.read()
+                audio_base64 = base64.b64encode(audio_bytes).decode()
+                
+                # Use HTML audio with autoplay
+                audio_html = f"""
+                <audio autoplay>
+                    <source src="data:audio/mpeg;base64,{audio_base64}" type="audio/mpeg">
+                    <source src="data:audio/wav;base64,{audio_base64}" type="audio/wav">
+                </audio>
+                """
+                st.markdown(audio_html, unsafe_allow_html=True)
+    except Exception as e:
+        # Silently fail if sound doesn't work
+        pass
 
 def build_search_url_from_custom(custom_url):
     """Simple function to validate and return custom URL."""
@@ -46,8 +72,7 @@ def _show_system_status():
         total_listings = 0
         recent_additions = 0
         cache_size_mb = 0
-    
-    # Clean metrics layout (same as home page)
+      # Clean metrics layout (same as home page)
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -60,10 +85,7 @@ def _show_system_status():
         else:
             st.metric("Cache Size", "< 0.01 MB")
     with col4:
-        if recent_additions > 0:
-            st.metric("Recent Activity", f"{recent_additions} listings")
-        else:
-            st.metric("Recent Activity", "None")
+        st.metric("Total Runs", st.session_state.get('total_runs', 0))
     
     # Status message
     status_text = "🟢 ACTIVE" if st.session_state.scraping_active else "🔴 STOPPED"
@@ -225,9 +247,7 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
         margin: 1.5rem 0;
     }
     </style>
-    """, unsafe_allow_html=True)
-
-    # Initialize session state
+    """, unsafe_allow_html=True)    # Initialize session state
     if 'url_pool' not in st.session_state:
         st.session_state.url_pool = []
     if 'scraping_active' not in st.session_state:
@@ -246,6 +266,8 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
         st.session_state.total_runs = 0
     if 'latest_results' not in st.session_state:
         st.session_state.latest_results = {}
+    if 'sound_effects_enabled' not in st.session_state:
+        st.session_state.sound_effects_enabled = False
 
     # Pre-select next URL when scraping starts
     if st.session_state.scraping_active and st.session_state.url_pool:
@@ -288,10 +310,8 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
     
     st.divider()
       # Controls
-    st.subheader("⚙️ Controls")
-    
-    # Adjacent buttons for Start/Stop and Auto-send toggle
-    col1, col2, col3 = st.columns([1.5, 1.5, 2])
+    st.subheader("⚙️ Controls")    # Adjacent buttons for Start/Stop and Auto-send toggle
+    col1, col2, col3 = st.columns([1.5, 2, 1.5])
     
     with col1:
         if not st.session_state.scraping_active:
@@ -299,8 +319,7 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
                 if st.session_state.url_pool:
                     st.session_state.scraping_active = True
                     st.session_state.last_scrape_time = 0
-                    
-                    # Pre-select first URL
+                      # Pre-select first URL
                     if len(st.session_state.url_pool) > 1:
                         st.session_state.next_url_index = random.randint(0, len(st.session_state.url_pool) - 1)
                     else:
@@ -308,6 +327,7 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
                     st.session_state.next_url_selected = True
                     
                     st.success("🚀 Started!")
+                    play_sound("Vroom 1.mp3")  # Play start sound effect
                     st.rerun()
                 else:
                     st.error("Add URLs first")
@@ -319,6 +339,11 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
     
     with col2:
         st.session_state.auto_send_active = st.checkbox("📤 Auto-send to Telegram", value=st.session_state.auto_send_active)
+        st.session_state.sound_effects_enabled = st.checkbox(
+            "🔊 Sound Effects", 
+            value=st.session_state.sound_effects_enabled,
+            help="Enable/disable sound effects for scraping events"
+        )
     
     with col3:
         st.session_state.interval_seconds = st.number_input(
@@ -378,10 +403,10 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
                         st.session_state.next_url_index = random.randint(0, len(st.session_state.url_pool) - 1)
                     else:
                         st.session_state.next_url_index = 0
-                    st.session_state.next_url_selected = True
-                      # Show results
+                    st.session_state.next_url_selected = True                    # Show results
                     if new_listings:
                         st.success(f"✅ Found {len(new_listings)} new listings!")
+                        play_sound("Sniff1.wav")  # Play sound when new listings found
                     else:
                         st.info("🔍 No new listings found")
                     

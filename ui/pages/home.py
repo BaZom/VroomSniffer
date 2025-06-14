@@ -29,11 +29,23 @@ def show_home_page(all_old_path, latest_new_path):
                 st.metric("Cache Size", f"{cache_size_mb} MB")
             else:
                 st.metric("Cache Size", "< 0.01 MB")
+        
         with col4:
-            if recent_listings:
-                st.metric("Recent Activity", f"{len(recent_listings)} listings")
+            # Show cache age instead of duplicate recent activity
+            import os
+            if all_old_path and os.path.exists(all_old_path):
+                import time
+                modified_time = os.path.getmtime(all_old_path)
+                hours_ago = int((time.time() - modified_time) / 3600)
+                if hours_ago == 0:
+                    st.metric("Last Updated", "< 1 hour ago")
+                elif hours_ago < 24:
+                    st.metric("Last Updated", f"{hours_ago}h ago")
+                else:
+                    days_ago = hours_ago // 24
+                    st.metric("Last Updated", f"{days_ago}d ago")
             else:
-                st.metric("Recent Activity", "None")
+                st.metric("Last Updated", "Never")
         
         # Simple status message
         if stats["total_listings"] == 0:
