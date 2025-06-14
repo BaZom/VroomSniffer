@@ -1,7 +1,7 @@
 # 🚗 VroomSniffer - Car Monitoring System
 
 <div align="center">
-  <img src="ui/resources/logo7.png" alt="VroomSniffer Logo" width="300">
+  <img src="ui/resources/logo3.jpg" alt="VroomSniffer Logo" width="300">
 </div>
 
 > **📝 Note: This is a hobby project created for educational and personal use only.**
