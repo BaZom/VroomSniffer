@@ -1,6 +1,6 @@
 import streamlit as st
 from notifier.telegram import send_telegram_message, format_car_listing_message
-from services.caralyze_service import manual_send_listings
+from services.vroomsniffer_service import manual_send_listings
 
 def manual_send_listings_ui(listings):
     """Clean UI for sending listings manually to Telegram."""
@@ -39,7 +39,7 @@ def telegram_test_button():
             import time
             time.sleep(0.5)
             
-            success, error = send_telegram_message("Test from CarAlyze! Connection successful!", parse_mode="HTML")
+            success, error = send_telegram_message("Test from VroomSniffer! Connection successful!", parse_mode="HTML")
             
             if success:
                 st.success("Connected! Telegram bot is working perfectly.")

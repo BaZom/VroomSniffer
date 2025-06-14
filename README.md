@@ -1,4 +1,4 @@
-# 🚗 Caralyze - Car Scraper System
+# 🚗 VroomSniffer - Car Scraper System
 
 A modern, modular web scraping system designed to collect car listings from eBay Kleinanzeigen, detect new listings, and send notifications via Telegram. Built with Python, Playwright, and Streamlit.
 
@@ -139,7 +139,7 @@ car_scraper/
 ├── scraper/                # Scraping engine
 │   └── ebay_kleinanzeigen_engine.py
 ├── services/               # Business logic layer
-│   └── caralyze_service.py
+│   └── vroomsniffer_service.py
 ├── storage/                # Data persistence
 │   ├── db.py              # Database operations
 │   └── listings/          # JSON data storage

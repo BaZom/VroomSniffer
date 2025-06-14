@@ -1,5 +1,5 @@
 """
-Caralyze Caching Service - URL-based caching system for car listings.
+VroomSniffer Caching Service - URL-based caching system for car listings.
 Handles scraping, URL-based caching, and cache management operations.
 This is the main interface between UI and caching logic.
 """

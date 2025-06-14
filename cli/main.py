@@ -224,7 +224,7 @@ def copy_scraper_results():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Caralyze Car Scraper CLI - Interact with JSON-based listing data",
+        description="VroomSniffer Car Scraper CLI - Interact with JSON-based listing data",
         epilog="""
 EXAMPLES:
   %(prog)s run "https://www.kleinanzeigen.de/s-autos/bmw/k0c216"
@@ -319,7 +319,7 @@ For more advanced features, use the Streamlit UI:
     version_parser = subparsers.add_parser(
         "version", 
         help="Show version information",
-        description="Display version and system information for the Caralyze car scraper."
+        description="Display version and system information for the VroomSniffer car scraper."
     )
 
     args = parser.parse_args()
@@ -335,7 +335,7 @@ For more advanced features, use the Streamlit UI:
     elif args.command == "notify":
         notify_new_findings(args.keyword)
     elif args.command == "version":
-        print("🚗 Caralyze Car Scraper v2.0.0 (Refactored)")
+        print("🚗 VroomSniffer Car Scraper v2.0.0 (Refactored)")
     elif args.command == "run":
         # Run the Playwright scraper engine with the given URL
         scraper_path = project_root / "scraper" / "ebay_kleinanzeigen_engine.py"

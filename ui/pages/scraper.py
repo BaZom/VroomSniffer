@@ -17,20 +17,62 @@ def build_search_url_from_custom(custom_url):
     return ""
 
 def _show_system_status():
-    """Display system status."""
-    st.subheader("📊 Status")
+    """Display system status with clean metrics layout matching home page."""
+    st.subheader("📊 System Status")
     
-    col1, col2, col3 = st.columns(3)
+    # Get actual data
+    try:
+        from services.vroomsniffer_service import get_cache_stats, load_cache
+        import os
+        
+        # Get cache stats from session state paths
+        all_old_path = st.session_state.get('all_old_path')
+        latest_new_path = st.session_state.get('latest_new_path')
+        
+        total_listings = 0
+        recent_additions = 0
+        cache_size_mb = 0
+        
+        if all_old_path and os.path.exists(all_old_path):
+            stats = get_cache_stats(all_old_path)
+            total_listings = stats.get('total_listings', 0)
+            cache_size_mb = stats.get('cache_size_mb', 0)
+        
+        if latest_new_path and os.path.exists(latest_new_path):
+            recent_data = load_cache(latest_new_path)
+            recent_additions = len(recent_data) if recent_data else 0
+            
+    except Exception:
+        total_listings = 0
+        recent_additions = 0
+        cache_size_mb = 0
+    
+    # Clean metrics layout (same as home page)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        status = "🟢 ACTIVE" if st.session_state.scraping_active else "🔴 STOPPED"
-        st.markdown(f'<div class="status-metric">{status}</div>', unsafe_allow_html=True)
-    
+        st.metric("Total Listings", total_listings)
     with col2:
-        st.markdown(f'<div class="status-metric">🔗 {len(st.session_state.url_pool)} URLs</div>', unsafe_allow_html=True)
-    
+        st.metric("Recent Additions", recent_additions)
     with col3:
-        st.markdown(f'<div class="status-metric">🔄 {st.session_state.total_runs} Runs</div>', unsafe_allow_html=True)
+        if cache_size_mb > 0:
+            st.metric("Cache Size", f"{cache_size_mb} MB")
+        else:
+            st.metric("Cache Size", "< 0.01 MB")
+    with col4:
+        if recent_additions > 0:
+            st.metric("Recent Activity", f"{recent_additions} listings")
+        else:
+            st.metric("Recent Activity", "None")
+    
+    # Status message
+    status_text = "🟢 ACTIVE" if st.session_state.scraping_active else "🔴 STOPPED"
+    scraper_info = f"Scraper: {status_text} | URLs: {len(st.session_state.url_pool)} | Runs: {st.session_state.total_runs}"
+    
+    if st.session_state.scraping_active:
+        st.info(f"🚀 {scraper_info}")
+    else:
+        st.warning(f"⏸️ {scraper_info}")
 
 def _display_url_pool():
     """Display current URL pool."""
@@ -102,36 +144,30 @@ def _send_listings_to_telegram(listings):
 
 def show_scraper_page(all_old_path, latest_new_path, root_dir):
     """Multi-URL scraper with clean interface."""
-      # Minimal styling
+    
+    # Store paths in session state for status function
+    st.session_state.all_old_path = all_old_path
+    st.session_state.latest_new_path = latest_new_path
+    
+    # VroomSniffer color scheme styling
     st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
-    
-    .status-metric {
-        background-color: #f8f8f8;
-        border: 1px solid #cccccc;
-        border-radius: 6px;
-        padding: 0.5rem;
-        text-align: center;
-        font-size: 0.85em;
-        font-weight: bold;
-        margin: 0.2rem;
-    }
+    header {visibility: hidden;}    /* Simple text styling - no boxes */
     
     .status-card {
         background-color: white;
-        border: 1px solid #e0e0e0;
+        border: 1px solid #D7E9F7;
         border-radius: 8px;
         padding: 1rem;
         margin: 0.5rem 0;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 1px 3px rgba(18, 60, 90, 0.1);
     }
     
     .url-item {
-        background-color: #f8f8f8;
-        border: 1px solid #cccccc;
+        background-color: #F4F4F4;
+        border: 1px solid #D7E9F7;
         border-radius: 6px;
         padding: 0.8rem;
         margin: 0.3rem 0;
@@ -141,15 +177,15 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
     }
     
     .next-url {
-        background-color: #e8e8e8;
-        border: 2px solid #666666;
+        background-color: #D7E9F7;
+        border: 2px solid #F57C00;
         border-radius: 6px;
         padding: 0.8rem;
         margin: 0.3rem 0;
         font-weight: bold;
         font-family: monospace;
         font-size: 0.9em;
-        color: #333333;
+        color: #123C5A;
     }
     
     .stButton > button {
@@ -159,24 +195,27 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
         min-width: 120px !important;
         margin: 0.2rem 0 !important;
         border-radius: 6px !important;
-        border: 1px solid #cccccc !important;
+        border: 1px solid #123C5A !important;
         background-color: white !important;
         color: #333333 !important;
     }
     
     .stButton > button:hover {
-        background-color: #f0f0f0 !important;
-        border-color: #999999 !important;
+        background-color: #D7E9F7 !important;
+        border-color: #123C5A !important;
+        color: #123C5A !important;
+    }
+      .stButton > button[kind="primary"] {
+        background-color: white !important;
+        color: #F57C00 !important;
+        border-color: #F57C00 !important;
+        font-weight: 600 !important;
     }
     
-    .stButton > button[kind="primary"] {
-        background-color: #666666 !important;
-        color: white !important;
-        border-color: #666666 !important;
-    }
-      .stButton > button[kind="primary"]:hover {
-        background-color: #555555 !important;
-        border-color: #555555 !important;
+    .stButton > button[kind="primary"]:hover {
+        background-color: #D7E9F7 !important;
+        border-color: #F57C00 !important;
+        color: #F57C00 !important;
     }
     
     /* Divider styling */
