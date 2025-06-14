@@ -19,21 +19,37 @@ sys.path.append(str(Path(__file__).parent.parent))
 def load_cache(cache_path):
     """Load cached listings as URL-indexed dictionary"""
     if Path(cache_path).exists():
-        with open(cache_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            # Handle both old filter-based format and new URL-based format
-            if isinstance(data, dict) and data:
-                first_key = next(iter(data.keys()))
-                if first_key.startswith('http'):
-                    return data  # Already URL-based
-                # Convert old format to URL-based
-                url_cache = {}
-                for filter_listings in data.values():
-                    if isinstance(filter_listings, list):
-                        for listing in filter_listings:
-                            if listing.get("URL"):
-                                url_cache[listing["URL"]] = listing
-                return url_cache
+        try:
+            # Check if file is empty first
+            if Path(cache_path).stat().st_size == 0:
+                return {}
+                
+            with open(cache_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                # Handle both old filter-based format and new URL-based format
+                if isinstance(data, dict) and data:
+                    first_key = next(iter(data.keys()))
+                    if first_key.startswith('http'):
+                        return data  # Already URL-based
+                    # Convert old format to URL-based
+                    url_cache = {}
+                    for filter_listings in data.values():
+                        if isinstance(filter_listings, list):
+                            for listing in filter_listings:
+                                if listing.get("URL"):
+                                    url_cache[listing["URL"]] = listing
+                    return url_cache
+                elif isinstance(data, list):
+                    # Handle list format (legacy)
+                    url_cache = {}
+                    for listing in data:
+                        if listing.get("URL"):
+                            url_cache[listing["URL"]] = listing
+                    return url_cache
+                return {}
+        except (json.JSONDecodeError, Exception):
+            # If file is corrupted or empty, return empty dict
+            return {}
     return {}
 
 def save_cache(cache_dict, cache_path):
@@ -84,23 +100,32 @@ def clear_cache(cache_path):
 
 def get_cache_stats(cache_path):
     """Get cache statistics"""
-    cache = load_cache(cache_path)
-    
-    # Calculate file size if cache file exists
-    file_size = 0
-    if Path(cache_path).exists():
-        file_size = Path(cache_path).stat().st_size
-    
-    return {
-        "total_listings": len(cache),
-        "urls": list(cache.keys()),
-        "cache_size": file_size,
-        "cache_size_mb": round(file_size / (1024 * 1024), 2) if file_size > 0 else 0
-    }
+    try:
+        cache = load_cache(cache_path)
+        
+        # Calculate file size if cache file exists
+        file_size = 0
+        if Path(cache_path).exists():
+            file_size = Path(cache_path).stat().st_size
+        
+        return {
+            "total_listings": len(cache),
+            "urls": list(cache.keys()),
+            "cache_size": file_size,
+            "cache_size_mb": round(file_size / (1024 * 1024), 2) if file_size > 0 else 0
+        }
+    except Exception as e:
+        # Return default stats if anything goes wrong
+        return {
+            "total_listings": 0,
+            "urls": [],
+            "cache_size": 0,
+            "cache_size_mb": 0
+        }
 
 def run_scraper_and_load_results(filters, build_search_url_ui, root_dir):
     """
-    Run the ebay_kleinanzeigen_engine.py scraper as a subprocess with the given filters and load results from the output JSON file.
+    Run the marketplace scraper engine as a subprocess with the given filters and load results from the output JSON file.
     Returns a list of listings.
     """
     import subprocess
@@ -113,13 +138,14 @@ def run_scraper_and_load_results(filters, build_search_url_ui, root_dir):
             url = build_search_url_ui(filters)
             print(f"[DEBUG] Generated URL from filters: {url}")
             print(f"[DEBUG] Filters used: {filters}")
-        args = [sys.executable, str(Path(root_dir) / "scraper" / "ebay_kleinanzeigen_engine.py"), "--url", url]
+        
+        args = [sys.executable, str(Path(root_dir) / "scraper" / "engine.py"), "--url", url]
         result = subprocess.run(
             args,
             cwd=root_dir, capture_output=True, text=True
         )
         if result.returncode == 0:
-            json_path = Path(root_dir) / "scraper" / "latest_results.json"
+            json_path = Path(root_dir) / "storage" / "latest_results.json"
             if json_path.exists():
                 with open(json_path, "r", encoding="utf-8") as f:
                     listings_data = json.load(f)
@@ -227,16 +253,11 @@ def clear_all_caches(root_dir=None):
         root_dir = Path(root_dir)
     
     cleared_files = []
-    errors = []
-    
-    # List of cache files to clear
+    errors = []      # List of cache files to clear
     cache_files = [
-        "storage/listings/all_old_results.json",
-        "storage/listings/latest_new_results.json", 
-        "scraper/latest_results.json",
-        "cli/data/all_old_results.json",
-        "cli/data/latest_new_results.json",
-        "cli/data/latest_results.json"
+        "storage/all_old_results.json",
+        "storage/latest_new_results.json",
+        "storage/latest_results.json"
     ]
     
     for cache_file in cache_files:

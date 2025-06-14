@@ -50,7 +50,7 @@ playwright install
 
 **Test the scraper:**
 ```bash
-python cli/main.py run "https://www.kleinanzeigen.de/s-autos/bmw/k0c216"
+python cli/main.py run "https://www.example-marketplace.com/s-autos/bmw/k0c216"
 ```
 
 **View results:**
@@ -138,8 +138,7 @@ car_scraper/
 ├── requirements.txt
 ├── cli/                     # Command-line interface
 │   ├── main.py             # Main CLI application
-│   ├── README.md           # CLI documentation
-│   └── data/               # CLI-specific data storage
+│   └── README.md           # CLI documentation
 ├── ui/                     # Web interface
 │   └── streamlit_app.py    # Streamlit web app
 ├── scraper/                # Scraping engine
@@ -148,7 +147,9 @@ car_scraper/
 │   └── vroomsniffer_service.py
 ├── storage/                # Data persistence
 │   ├── db.py              # Database operations
-│   └── listings/          # JSON data storage
+│   ├── latest_results.json      # Latest scraping results
+│   ├── latest_new_results.json  # New listings from last run
+│   └── all_old_results.json     # Historical listings cache
 ├── notifier/              # Notification system
 │   └── telegram.py        # Telegram integration
 ├── proxy/                 # Proxy management
@@ -169,11 +170,10 @@ car_scraper/
 ### Core Components
 - `cli/` → **Command-line interface** (organized in dedicated folder)
   - `cli/main.py` → Main CLI application
-  - `cli/data/` → CLI-specific data storage
 - `ui/` → **Web interface** (Streamlit app)
 - `scraper/` → **Scraping engine** (Playwright logic)
 - `services/` → **Business logic** (service layer)
-- `storage/` → **Data persistence** (SQLite/PostgreSQL)
+- `storage/` → **Centralized data storage** (JSON files, database connections)
 - `notifier/` → **Notifications** (Telegram messaging)
 
 ### Supporting Components

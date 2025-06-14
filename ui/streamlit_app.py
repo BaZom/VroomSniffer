@@ -201,18 +201,20 @@ def main():
     </style>
     """
     st.markdown(clean_css, unsafe_allow_html=True)
-    
-    # Setup paths
+      # Setup paths - use the same storage directory as scraper and CLI
     root_dir = Path(__file__).parent.parent
-    listings_dir = root_dir / "storage" / "listings"
-    listings_dir.mkdir(parents=True, exist_ok=True)
-    all_old_path = listings_dir / "all_old_results.json"
-    latest_new_path = listings_dir / "latest_new_results.json"    # Initialize session state
+    storage_dir = root_dir / "storage"
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    
+    all_old_path = storage_dir / "all_old_results.json"
+    latest_new_path = storage_dir / "latest_new_results.json"
+    
+    # Initialize session state
     if 'current_page' not in st.session_state:
         st.session_state.current_page = "🏠 Home"
-    
-    # Sidebar navigation
-    with st.sidebar:        # Add VroomSniffer logo
+      # Sidebar navigation
+    with st.sidebar:
+        # Add VroomSniffer logo
         try:
             st.image("ui/resources/logo6.png", width=200)
         except:

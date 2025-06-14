@@ -27,7 +27,7 @@ def show_playground_page(all_old_path, latest_new_path, root_dir):
         with col1:
             test_url = st.text_input(
                 "Test URL",
-                placeholder="https://www.kleinanzeigen.de/s-autos/...",
+                placeholder="https://marketplace-url.com/search...",
                 help="Enter a URL to test scraping functionality"
             )
         
@@ -46,7 +46,7 @@ def show_playground_page(all_old_path, latest_new_path, root_dir):
                     col1, col2 = st.columns(2)
                     with col1:
                         st.write("**URL Validation:**")
-                        st.write("✓ Valid Kleinanzeigen URL")
+                        st.write("✓ Valid marketplace URL")
                         st.write("✓ Search parameters detected")
                         st.write("✓ Connection successful")
                     

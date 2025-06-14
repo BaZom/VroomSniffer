@@ -1,9 +1,10 @@
 import streamlit as st
 import sys
-from pathlib import Path
+import json
 import time
-import random
 import base64
+import random
+from pathlib import Path
 
 # Add the parent directory to the path so we can import from local modules
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -22,24 +23,51 @@ def play_sound(sound_file):
         if sound_path.exists():
             with open(sound_path, "rb") as audio_file:
                 audio_bytes = audio_file.read()
-                audio_base64 = base64.b64encode(audio_bytes).decode()
-                
-                # Use HTML audio with autoplay
-                audio_html = f"""
-                <audio autoplay>
-                    <source src="data:audio/mpeg;base64,{audio_base64}" type="audio/mpeg">
-                    <source src="data:audio/wav;base64,{audio_base64}" type="audio/wav">
-                </audio>
-                """
-                st.markdown(audio_html, unsafe_allow_html=True)
+            
+            # Use Streamlit's native audio component for better browser compatibility
+            # This creates a clickable audio player
+            st.audio(audio_bytes, format='audio/wav' if sound_file.endswith('.wav') else 'audio/mp3')
+            
+            # Also try HTML audio with multiple fallback approaches
+            audio_base64 = base64.b64encode(audio_bytes).decode()
+            audio_format = "audio/wav" if sound_file.endswith('.wav') else "audio/mpeg"
+              # Multiple HTML approaches for better browser compatibility
+            audio_html = f"""
+            <script>
+                // Try multiple methods to play audio
+                try {{
+                    // Method 1: Create and play audio element
+                    var audio = new Audio('data:{audio_format};base64,{audio_base64}');
+                    audio.volume = 0.5;
+                    audio.play().catch(function(e) {{
+                        console.log('Audio play failed:', e);
+                    }});
+                }} catch(e) {{
+                    console.log('Audio creation failed:', e);
+                }}
+            </script>
+            <audio controls autoplay style="display:none;">
+                <source src="data:{audio_format};base64,{audio_base64}" type="{audio_format}">
+            </audio>
+            """
+            st.markdown(audio_html, unsafe_allow_html=True)
+              # Add delay to let sound complete before continuing
+            import time
+            time.sleep(2.5)  # Allow 2.5 seconds for sound to play completely
+            
     except Exception as e:
-        # Silently fail if sound doesn't work
+        # Show error in debug mode
+        if st.session_state.get('debug_mode', False):
+            st.error(f"Sound playback error: {e}")
         pass
 
 def build_search_url_from_custom(custom_url):
-    """Simple function to validate and return custom URL."""
+    """Validate and return custom URL only if it's a proper HTTP/HTTPS URL."""
     if custom_url and custom_url.strip():
-        return custom_url.strip()
+        url = custom_url.strip()
+        # Basic URL validation
+        if url.startswith(('http://', 'https://')) and '.' in url:
+            return url
     return ""
 
 def _show_system_status():
@@ -164,6 +192,62 @@ def _send_listings_to_telegram(listings):
     except Exception as e:
         st.error(f"Telegram sending failed: {str(e)}")
 
+def get_url_storage_path():
+    """Get the path for URL storage file"""
+    return Path(__file__).parent.parent.parent / "storage" / "saved_urls.json"
+
+def load_saved_urls():
+    """Load saved URLs from storage"""
+    try:
+        url_file = get_url_storage_path()
+        if url_file.exists():
+            with open(url_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return data.get('urls', [])
+    except Exception as e:
+        pass
+    return []
+
+def save_urls_to_storage(urls):
+    """Save URLs to storage file"""
+    try:
+        url_file = get_url_storage_path()
+        url_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        data = {
+            'urls': urls,
+            'last_updated': time.strftime('%Y-%m-%d %H:%M:%S')
+        }
+        
+        with open(url_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        return False
+
+def add_url_to_storage(url):
+    """Add a single URL to storage"""
+    saved_urls = load_saved_urls()
+    if url not in saved_urls:
+        saved_urls.append(url)
+        return save_urls_to_storage(saved_urls)
+    return True
+
+def remove_url_from_storage(url):
+    """Remove a URL from storage"""
+    saved_urls = load_saved_urls()
+    if url in saved_urls:
+        saved_urls.remove(url)
+        return save_urls_to_storage(saved_urls)
+    return True
+
+def clear_url_storage():
+    """Clear all URLs from storage"""
+    try:
+        return save_urls_to_storage([])
+    except Exception:
+        return False
+
 def show_scraper_page(all_old_path, latest_new_path, root_dir):
     """Multi-URL scraper with clean interface."""
     
@@ -250,6 +334,9 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
     """, unsafe_allow_html=True)    # Initialize session state
     if 'url_pool' not in st.session_state:
         st.session_state.url_pool = []
+        # Load saved URLs on first initialization
+        saved_urls = load_saved_urls()
+        st.session_state.url_pool.extend(saved_urls)
     if 'scraping_active' not in st.session_state:
         st.session_state.scraping_active = False
     if 'auto_send_active' not in st.session_state:
@@ -280,33 +367,84 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
             st.session_state.next_url_selected = True    # System Status
     _show_system_status()
     
-    st.divider()
-      # URL Management
+    st.divider()      # URL Management
     st.subheader("🔧 URL Management")
     
-    new_url = st.text_input("Enter search URL:", placeholder="https://www.ebay-kleinanzeigen.de/...")
+    # Load saved URLs on first load
+    if 'saved_urls_loaded' not in st.session_state:
+        saved_urls = load_saved_urls()
+        st.session_state.url_pool.extend([url for url in saved_urls if url not in st.session_state.url_pool])
+        st.session_state.saved_urls_loaded = True
     
-    # Adjacent buttons for Add URL and Clear Pool
-    col1, col2 = st.columns(2)
+    # URL input
+    new_url = st.text_input("Enter search URL:", placeholder="https://marketplace-url.com/search...")
+      # URL management buttons
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         if st.button("Add URL", type="primary", use_container_width=True):
             built_url = build_search_url_from_custom(new_url)
             if built_url and built_url not in st.session_state.url_pool:
                 st.session_state.url_pool.append(built_url)
+                add_url_to_storage(built_url)
                 st.success("✅ URL added!")
-                st.rerun()
             elif built_url in st.session_state.url_pool:
                 st.warning("⚠️ URL already exists")
             else:
-                st.error("❌ Invalid URL")
+                st.error("❌ Invalid URL (must start with http:// or https://)")
     
     with col2:
+        if st.button("Load Saved URLs", use_container_width=True):
+            saved_urls = load_saved_urls()
+            if not saved_urls:
+                st.info("📭 No URLs found in storage")
+            else:
+                added_count = 0
+                for url in saved_urls:
+                    # Validate saved URLs before adding
+                    if url.startswith(('http://', 'https://')) and url not in st.session_state.url_pool:
+                        st.session_state.url_pool.append(url)
+                        added_count += 1
+                if added_count > 0:
+                    st.success(f"✅ Loaded {added_count} URLs!")
+                else:
+                    st.info("ℹ️ No new URLs to load")
+    
+    with col3:
         if st.button("Clear Pool", use_container_width=True):
             st.session_state.url_pool = []
             st.session_state.scraping_active = False
-            st.success("🧹 Pool cleared!")
-            st.rerun()# URL Pool
-    _display_url_pool()
+            st.success("✅ Pool cleared!")
+    
+    with col4:
+        if st.button("Clear Storage", use_container_width=True):
+            if clear_url_storage():
+                st.success("✅ Storage cleared!")
+            else:
+                st.error("❌ Failed to clear storage")
+    
+    # Display current URL pool with remove functionality
+    if st.session_state.url_pool:
+        st.subheader(f"📋 Current URL Pool ({len(st.session_state.url_pool)} URLs)")
+        
+        for i, url in enumerate(st.session_state.url_pool):
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                # Show URL with truncation for long URLs
+                display_url = url if len(url) <= 60 else f"{url[:60]}..."
+                
+                # Highlight the next URL to be scraped
+                if (st.session_state.scraping_active and 
+                    hasattr(st.session_state, 'next_url_index') and 
+                    i == st.session_state.next_url_index):
+                    st.markdown(f'<div class="next-url">🎯 NEXT: {i+1}. {display_url}</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div class="url-item">{i+1}. {display_url}</div>', unsafe_allow_html=True)
+            with col2:
+                if st.button("🗑️", key=f"remove_{i}", help="Remove from pool"):
+                    st.session_state.url_pool.pop(i)
+                    st.rerun()
+    else:
+        st.info("📭 No URLs in pool. Add some URLs to get started!")
     
     st.divider()
       # Controls
