@@ -14,8 +14,7 @@ from notifier.telegram import send_telegram_message, format_car_listing_message
 
 def play_sound(sound_file):
     """Play a sound effect using Streamlit's audio component."""
-    try:
-        # Check if sound effects are enabled
+    try:        # Check if sound effects are enabled
         if not st.session_state.get('sound_effects_enabled', True):
             return
             
@@ -23,15 +22,11 @@ def play_sound(sound_file):
         if sound_path.exists():
             with open(sound_path, "rb") as audio_file:
                 audio_bytes = audio_file.read()
-            
-            # Use Streamlit's native audio component for better browser compatibility
-            # This creates a clickable audio player
-            st.audio(audio_bytes, format='audio/wav' if sound_file.endswith('.wav') else 'audio/mp3')
-            
-            # Also try HTML audio with multiple fallback approaches
+              # Use hidden HTML audio for background sound effects
             audio_base64 = base64.b64encode(audio_bytes).decode()
             audio_format = "audio/wav" if sound_file.endswith('.wav') else "audio/mpeg"
-              # Multiple HTML approaches for better browser compatibility
+            
+            # Multiple HTML approaches for better browser compatibility
             audio_html = f"""
             <script>
                 // Try multiple methods to play audio
