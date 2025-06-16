@@ -26,8 +26,8 @@ A modern, service-oriented web scraping system designed to collect car listings 
 
 **Clone the repository:**
 ```bash
-git clone <your-repository-url>
-cd car_scraper
+git clone https://github.com/BaZom/VroomSniffer.git
+cd VroomSniffer
 ```
 
 **Create virtual environment:**
@@ -81,7 +81,7 @@ python cli/main.py run "https://marketplace-url.com/search-cars" --notify --noti
 python cli/main.py schedule "https://marketplace-url.com/search-cars" --interval 60 --runs 10 --notify
 ```
 
-For additional CLI commands and options, see the [detailed documentation](./docs/architecture.md).
+Additional CLI commands include search capabilities, sending to Telegram, and viewing version information.
 
 ### Web Interface
 
@@ -133,13 +133,42 @@ Configure proxy rotation in `proxy/manager.py` for enhanced scraping reliability
 
 VroomSniffer follows a service-oriented architecture with specialized services for different concerns. The system uses the Service Provider pattern for dependency management and a clean separation between UI/CLI and business logic.
 
-Key components include:
+### Architecture Diagram
+
+```
+┌─────────────────────────────────┐       ┌─────────────────────┐
+│            UI Layer             │       │      CLI Layer       │
+│  (Streamlit Web Application)    │       │  (Command Line Tool) │
+└───────────────┬─────────────────┘       └──────────┬──────────┘
+                │                                     │
+                ▼                                     ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      Services Provider                           │
+│       (Centralized Service Factory and Dependency Manager)       │
+└─────────────────────────────┬─────────────────────────────────┘
+                             │
+         ┌──────────────────┬┴───────────────┬─────────────────┐
+         │                  │                │                 │
+         ▼                  ▼                ▼                 ▼
+┌─────────────────┐  ┌────────────────┐  ┌──────────────┐  ┌──────────────┐
+│ Storage Service │  │ Scraper Service│  │Notifier Svc  │  │Statistics Svc│
+└────────┬────────┘  └────────┬───────┘  └──────┬───────┘  └──────┬───────┘
+         │                    │                  │                 │
+         ▼                    ▼                  ▼                 ▼
+┌─────────────────┐  ┌────────────────┐  ┌──────────────┐  ┌──────────────┐
+│  JSON Storage   │  │Playwright      │  │Telegram Bot  │  │Analytics     │
+│  (Data Files)   │  │(Scraper Engine)│  │(Notifications)│  │(Reporting)   │
+└─────────────────┘  └────────────────┘  └──────────────┘  └──────────────┘
+```
+
+### Key Components
+
 - **UI & CLI Layers**: Thin entry points with no business logic
 - **Services Provider**: Centralized dependency manager
 - **Service Layer**: Contains all business logic in specialized service classes
 - **Infrastructure**: Storage, scraping engine, and notification systems
 
-For detailed architecture information and diagrams, see the [Architecture Documentation](./docs/architecture.md).
+For detailed architecture information, see the [Architecture Documentation](./docs/architecture.md).
 For guidance on adding new features, see [Feature Implementation Guide](./docs/feature_implementation_guide.md).
 
 ## Troubleshooting
