@@ -197,3 +197,27 @@ For guidance on adding new features, see [Feature Implementation Guide](./docs/f
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## CLI Documentation
+
+The VroomSniffer CLI provides a powerful command-line interface for scraping, managing listings, and sending notifications. All CLI documentation is now available in a single comprehensive document:
+
+- [Complete CLI Documentation](./docs/cli_documentation.md) - Everything you need to know about using and extending the CLI
+
+**Basic CLI Usage:**
+
+```bash
+# Run the scraper
+python cli/main.py run "https://www.example-marketplace.com/s-autos/bmw/k0c216"
+
+# List results
+python cli/main.py list
+
+# Search results
+python cli/main.py search "320d"
+
+# Schedule automatic scraping
+python cli/main.py schedule --use-saved --random --interval 300 --notify-new
+```
+
+For more information, check the [Complete CLI Documentation](./docs/cli_documentation.md).
