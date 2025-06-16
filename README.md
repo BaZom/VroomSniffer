@@ -18,7 +18,7 @@ A modern, service-oriented web scraping system designed to collect car listings 
 - **🌐 Web Dashboard**: Interactive Streamlit interface with real-time monitoring
 - **⚡ CLI Interface**: Command-line tools for automation and scripting
 - **🔧 Service-Oriented Architecture**: Clean separation of concerns with specialized services
-- **📊 Multiple Storage Options**: JSON-based storage with extensible service layer
+- **📊 JSON-based Storage**: Efficient data persistence with extensible service layer
 
 ## 🚀 Quick Start
 
@@ -175,16 +175,14 @@ car_scraper/
 │   ├── scraper_service.py       # Scraper operations
 │   └── scheduler_service.py     # Scheduling and timing
 ├── storage/                # Data persistence
-│   ├── db.py              # Database operations
 │   ├── latest_results.json      # Latest scraping results
 │   ├── latest_new_results.json  # New listings from last run
-│   └── all_old_results.json     # Historical listings cache
+│   ├── all_old_results.json     # Historical listings cache
+│   └── saved_urls.json          # Saved search URLs
 ├── notifier/              # Notification system
 │   └── telegram.py        # Telegram integration
 ├── proxy/                 # Proxy management
 │   └── manager.py
-├── utils/                 # Utilities
-│   └── deduplication.py
 ├── scheduler/             # Job scheduling
 │   └── job.py
 ├── config/                # Configuration
@@ -199,6 +197,8 @@ car_scraper/
 - `providers/` → **Service provider** implementation for dependency management
 - `scraper/` → **Scraping engine** using Playwright for JavaScript-heavy sites
 - `services/` → **Service layer** with specialized services for each concern
+- `storage/` → **Data storage** using JSON files for persistence
+- `notifier/` → **Notifications** via Telegram
 - `storage/` → **Centralized data storage** using JSON files
 - `notifier/` → **Notifications** via Telegram
 
@@ -239,9 +239,9 @@ Configure Telegram notifications for automatic car listing alerts:
 ### Proxy Support
 Configure proxy rotation in `proxy/manager.py` for enhanced scraping reliability.
 
-### Database Storage
-- **SQLite**: Default lightweight option (configured in `storage/db.py`)
-- **PostgreSQL**: Production-ready option for larger deployments
+### Data Storage
+- **JSON Files**: Simple storage for small to medium datasets (current implementation)
+- **Future Options**: The system is designed to be extended with database storage if needed
 
 ---
 
@@ -255,11 +255,13 @@ python -m pytest tests/
 ### Project Architecture
 The project follows a clean, modular architecture with separation of concerns:
 - **CLI**: User interface and command handling
+- **UI**: Streamlit-based web dashboard and visualization
+- **Providers**: Service factory and dependency management
 - **Scraper**: Web scraping logic using Playwright
 - **Services**: Business logic and data processing
-- **Storage**: Data persistence and management
-- **UI**: Web-based dashboard and visualization
-- **Utils**: Shared utilities and helpers
+- **Storage**: JSON-based data persistence
+- **Notifier**: Telegram notification delivery
+- **Scheduler**: Job scheduling and timing
 
 ---
 
@@ -313,15 +315,4 @@ Key benefits:
 - **Automatic dependency injection**: Services can depend on other services
 - **Consistent state**: Both UI and CLI use the same service instances
 
-Example usage:
-```python
-from providers.services_provider import get_storage_service, get_scraper_service
-
-# Get service instances
-storage_service = get_storage_service()
-scraper_service = get_scraper_service()
-
-# Use services
-listings = storage_service.get_all_cached_listings(path)
-scraper_service.run_scraper(filters)
 ```
