@@ -3,6 +3,7 @@ StatisticsService - Handles listing analysis and statistics.
 Responsible for extracting prices, calculating statistics and providing search functionality.
 """
 import re
+import pandas as pd
 from pathlib import Path
 
 class StatisticsService:
@@ -73,3 +74,90 @@ class StatisticsService:
             max_price=max_price,
             cache_path=cache_path
         )
+        
+    def calculate_statistics(self, listings):
+        """
+        Calculate basic statistics from a list of listings.
+        
+        Args:
+            listings: List of car listing dictionaries
+            
+        Returns:
+            Dictionary with statistics
+        """
+        # Extract prices
+        prices = self.extract_prices(listings)
+        
+        # Calculate statistics
+        total_count = len(listings)
+        avg_price = sum(prices) / len(prices) if prices else 0
+        median_price = sorted(prices)[len(prices)//2] if prices else 0
+        
+        return {
+            'avg_price': avg_price,
+            'median_price': median_price,
+            'total_count': total_count,
+            'prices': prices
+        }
+    
+    def create_price_distribution_chart(self, prices, bins=20):
+        """
+        Create price distribution chart data.
+        
+        Args:
+            prices: List of numeric prices
+            bins: Number of bins for histogram
+            
+        Returns:
+            DataFrame with price ranges and counts
+        """
+        df_prices = pd.DataFrame({"Price": prices})
+        
+        # Create bins for better visualization
+        hist_data = pd.cut(df_prices["Price"], bins=bins, include_lowest=True)
+        hist_counts = hist_data.value_counts().sort_index()
+        
+        # Convert to chart-friendly format
+        chart_data = pd.DataFrame({
+            'Price Range': [f"€{int(interval.left):,}-€{int(interval.right):,}" for interval in hist_counts.index],
+            'Count': hist_counts.values
+        })
+        
+        return chart_data
+    
+    def analyze_locations(self, listings):
+        """
+        Analyze location distribution in listings.
+        
+        Args:
+            listings: List of car listing dictionaries
+            
+        Returns:
+            Dictionary mapping locations to counts
+        """
+        locations = {}
+        for listing in listings:
+            location = listing.get("Location", "Unknown")
+            locations[location] = locations.get(location, 0) + 1
+        
+        return locations
+    
+    def categorize_prices(self, prices):
+        """
+        Categorize prices into budget ranges.
+        
+        Args:
+            prices: List of numeric prices
+            
+        Returns:
+            Dictionary with counts by category
+        """
+        low_price = len([p for p in prices if p < 10000])
+        mid_price = len([p for p in prices if 10000 <= p < 25000])
+        high_price = len([p for p in prices if p >= 25000])
+        
+        return {
+            'low': low_price,
+            'mid': mid_price,
+            'high': high_price
+        }

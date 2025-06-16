@@ -1,51 +1,64 @@
-import streamlit as st
+﻿import streamlit as st
 import sys
+import os
+import time
 from pathlib import Path
 
 # Add the parent directory to the path so we can import from local modules
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from services.vroomsniffer_service import get_cache_stats, load_cache
+# Import services via the new services_provider
+from providers.services_provider import get_storage_service
+# Import UI components
+from ui.components.metrics import display_metrics_row
+from ui.components.navigation import create_navigation_cards
+from ui.components.error_handling import handle_error
 
+@handle_error
 def show_home_page(all_old_path, latest_new_path):
     """Clean home page with simple design and clear navigation."""    
     st.title("VroomSniffer - Car Monitoring System")
     st.write("Monitor car listings with scraping, data management, and notifications")
     
+    # Initialize the storage service
+    storage_service = get_storage_service()
+    
     # Simple metrics
     try:
-        stats = get_cache_stats(all_old_path)
-        recent_listings = load_cache(latest_new_path) if latest_new_path else {}
+        stats = storage_service.get_cache_stats(all_old_path)
+        recent_listings = storage_service.load_cache(latest_new_path) if latest_new_path else {}
         
-        col1, col2, col3, col4 = st.columns(4)
+        # Prepare metrics data
+        metrics_data = [
+            {'label': 'Total Listings', 'value': stats["total_listings"]},
+            {'label': 'Recent Additions', 'value': len(recent_listings) if recent_listings else 0},
+        ]
         
-        with col1:
-            st.metric("Total Listings", stats["total_listings"])
-        with col2:
-            st.metric("Recent Additions", len(recent_listings) if recent_listings else 0)
-        with col3:
-            cache_size_mb = stats.get('cache_size_mb', 0)
-            if cache_size_mb > 0:
-                st.metric("Cache Size", f"{cache_size_mb} MB")
+        # Add cache size metric
+        cache_size_mb = stats.get('cache_size_mb', 0)
+        if cache_size_mb > 0:
+            metrics_data.append({'label': 'Cache Size', 'value': f"{cache_size_mb} MB"})
+        else:
+            metrics_data.append({'label': 'Cache Size', 'value': "< 0.01 MB"})
+        
+        # Prepare the last column with update time info
+        last_updated = "Never"
+        if all_old_path and os.path.exists(all_old_path):
+            modified_time = os.path.getmtime(all_old_path)
+            hours_ago = int((time.time() - modified_time) / 3600)
+            if hours_ago == 0:
+                last_updated = "< 1 hour ago"
+            elif hours_ago < 24:
+                last_updated = f"{hours_ago}h ago"
             else:
-                st.metric("Cache Size", "< 0.01 MB")
+                days_ago = hours_ago // 24
+                last_updated = f"{days_ago}d ago"
         
-        with col4:
-            # Show cache age instead of duplicate recent activity
-            import os
-            if all_old_path and os.path.exists(all_old_path):
-                import time
-                modified_time = os.path.getmtime(all_old_path)
-                hours_ago = int((time.time() - modified_time) / 3600)
-                if hours_ago == 0:
-                    st.metric("Last Updated", "< 1 hour ago")
-                elif hours_ago < 24:
-                    st.metric("Last Updated", f"{hours_ago}h ago")
-                else:
-                    days_ago = hours_ago // 24
-                    st.metric("Last Updated", f"{days_ago}d ago")
-            else:
-                st.metric("Last Updated", "Never")
+        # Add the last column to metrics
+        metrics_data.append({'label': 'Last Updated', 'value': last_updated})
+        
+        # Use the metrics component to display metrics
+        display_metrics_row(metrics_data, 4)
         
         # Simple status message
         if stats["total_listings"] == 0:
@@ -56,46 +69,53 @@ def show_home_page(all_old_path, latest_new_path):
     except Exception as e:
         st.error(f"Error loading stats: {str(e)}")
     
-    st.divider()    # Simple navigation cards
+    st.divider()
+    
+    # Simple navigation cards
     st.subheader("Quick Navigation")
     
+    # Define navigation cards data
+    cards_data = [
+        {
+            'title': 'Car Scraper',
+            'description': 'Search & monitor car listings',
+            'bullet_points': [
+                'Manual scraping with URL inputs',
+                'Real-time monitoring capabilities',
+                'Telegram notifications'
+            ],
+            'target_page': '🔍 Scraper',
+            'is_primary': True
+        },
+        {
+            'title': 'Data Storage',
+            'description': 'Analyze & manage your data',
+            'bullet_points': [
+                'Browse and search cached listings',
+                'Advanced filtering and insights',
+                'Cache management tools'
+            ],
+            'target_page': '📊 Data Storage',
+            'is_primary': True
+        },
+        {
+            'title': 'Playground',
+            'description': 'Testing & experimentation',
+            'bullet_points': [
+                'Test scraping functionality',
+                'Send test messages',
+                'Debug and troubleshoot'
+            ],
+            'target_page': '🎮 Playground',
+            'is_primary': False
+        }
+    ]
+    
+    # Create navigation cards
+    create_navigation_cards(cards_data)
+    
+    # System status section
     col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Car Scraper")
-        st.write("Search & monitor car listings")
-        st.write("• Manual scraping with URL inputs")
-        st.write("• Real-time monitoring capabilities")
-        st.write("• Telegram notifications")
-        
-        if st.button("Go to Scraper", type="primary", use_container_width=True):
-            st.session_state.current_page = "🔍 Scraper"
-            st.rerun()
-    
-    with col2:
-        st.subheader("Data Storage")
-        st.write("Analyze & manage your data")
-        st.write("• Browse and search cached listings")
-        st.write("• Advanced filtering and insights")
-        st.write("• Cache management tools")
-        
-        if st.button("Go to Data Storage", type="primary", use_container_width=True):
-            st.session_state.current_page = "📊 Data Storage"
-            st.rerun()
-    
-    # Second row
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Playground")
-        st.write("Testing & experimentation")
-        st.write("• Test scraping functionality")
-        st.write("• Send test messages")
-        st.write("• Debug and troubleshoot")
-        
-        if st.button("Go to Playground", type="secondary", use_container_width=True):
-            st.session_state.current_page = "🎮 Playground"
-            st.rerun()
     
     with col2:
         st.subheader("System Status")
@@ -107,8 +127,5 @@ def show_home_page(all_old_path, latest_new_path):
             else:
                 st.write("• No recent additions")
         else:
-            st.write("Getting started:")
-            st.write("1. Go to Scraper page")
-            st.write("2. Enter a car listing URL")
-            st.write("3. Start scraping listings")
-            st.write("4. Analyze results in Data Storage")
+            st.write("No data yet - start scraping!")
+

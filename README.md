@@ -144,19 +144,30 @@ car_scraper/
 ├── requirements.txt
 ├── cli/                     # Command-line interface
 │   ├── main.py             # Main CLI application
-│   └── README.md           # CLI documentation
 ├── ui/                     # Web interface
 │   ├── streamlit_app.py    # Streamlit web app
-│   ├── cache_management.py # Cache management components
-│   ├── telegram_controls.py # Telegram UI controls
-│   └── pages/              # Page components for the UI
-│       ├── scraper.py      # Main scraper page
-│       ├── home.py         # Home page
-│       └── data_storage.py # Data management page
+│   ├── components/         # UI component modules
+│   │   ├── error_handling.py
+│   │   ├── metrics.py
+│   │   ├── navigation.py
+│   │   ├── scraper_controls.py
+│   │   ├── sound_effects.py
+│   │   ├── state_management.py
+│   │   ├── styles.py
+│   │   ├── telegram_controls.py
+│   │   ├── ui_components.py
+│   │   └── url_management.py
+│   ├── pages/              # Page components for the UI
+│   │   ├── scraper.py      # Main scraper page
+│   │   ├── home.py         # Home page
+│   │   ├── data_storage.py # Data management page
+│   │   └── playground.py   # Testing/playground page
+│   └── resources/          # UI resources (images, sounds)
+├── providers/              # Service provider pattern implementation
+│   └── services_provider.py # Centralized service factory/singleton manager
 ├── scraper/                # Scraping engine
 │   └── engine.py           # Main scraping engine
 ├── services/               # Service layer (business logic)
-│   ├── vroomsniffer_service.py  # Main facade service
 │   ├── storage_service.py       # Data storage operations
 │   ├── url_pool_service.py      # URL management
 │   ├── statistics_service.py    # Analytics and statistics
@@ -178,26 +189,27 @@ car_scraper/
 │   └── job.py
 ├── config/                # Configuration
 │   └── car_models.py
-├── logger/                # Logging
-│   └── logging_config.py
-└── tests/                 # Test suite (future)
+└── logger/                # Logging
+    └── logging_config.py
 ```
 
 ### Core Components
 - `cli/` → **Command-line interface** with both ad-hoc and scheduled scraping
 - `ui/` → **Web interface** with real-time monitoring and URL pool management
+- `providers/` → **Service provider** implementation for dependency management
 - `scraper/` → **Scraping engine** using Playwright for JavaScript-heavy sites
 - `services/` → **Service layer** with specialized services for each concern
 - `storage/` → **Centralized data storage** using JSON files
 - `notifier/` → **Notifications** via Telegram
 
 ### Service Layer Architecture
-- `vroomsniffer_service.py` → Main facade coordinating all services
-- `storage_service.py` → Handling data persistence and retrieval
-- `url_pool_service.py` → Managing search URLs and URL pools
-- `statistics_service.py` → Generating analytics and statistics
-- `notification_service.py` → Managing notification delivery
-- `scraper_service.py` → Coordinating scraping operations
+- `providers/services_provider.py` → Centralized service factory/singleton manager
+- `services/storage_service.py` → Handling data persistence and retrieval
+- `services/url_pool_service.py` → Managing search URLs and URL pools
+- `services/statistics_service.py` → Generating analytics and statistics
+- `services/notification_service.py` → Managing notification delivery
+- `services/scraper_service.py` → Coordinating scraping operations
+- `services/scheduler_service.py` → Managing timed scraping jobs
 - `scheduler_service.py` → Managing timing and scheduling
 
 ---
@@ -288,3 +300,28 @@ The project follows a clean, modular architecture with separation of concerns:
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Architecture
+
+### Service Provider Pattern
+
+This project uses the Service Provider pattern to manage service dependencies. The pattern is implemented in `providers/services_provider.py` and provides a centralized mechanism for accessing service instances throughout the application.
+
+Key benefits:
+- **Singleton services**: Only one instance of each service exists
+- **Lazy initialization**: Services are only created when needed
+- **Automatic dependency injection**: Services can depend on other services
+- **Consistent state**: Both UI and CLI use the same service instances
+
+Example usage:
+```python
+from providers.services_provider import get_storage_service, get_scraper_service
+
+# Get service instances
+storage_service = get_storage_service()
+scraper_service = get_scraper_service()
+
+# Use services
+listings = storage_service.get_all_cached_listings(path)
+scraper_service.run_scraper(filters)
+```

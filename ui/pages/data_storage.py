@@ -6,25 +6,22 @@ import pandas as pd
 # Add the parent directory to the path so we can import from local modules
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from services.vroomsniffer_service import (
-    get_cache_stats, 
-    get_all_cached_listings, 
-    get_listings_by_search_criteria,
-    remove_listings_by_ids,
-    clear_all_caches,
-    show_statistics,
-    manual_send_listings
+# Import services via the provider pattern
+from providers.services_provider import (
+    get_storage_service,
+    get_statistics_service,
+    get_notification_service
 )
 from notifier.telegram import send_telegram_message, format_car_listing_message
 
 def show_data_storage_page(all_old_path, latest_new_path):
-    """Clean data storage page for managing cached listings."""
+    """Data storage page with clean interface for viewing and managing cached data."""
     
     st.title("Data Storage & Insights")
     st.write("Search, analyze, and manage your collected car listing data")
     
     # Check if we have data
-    stats = get_cache_stats(all_old_path)
+    stats = get_statistics_service().get_cache_stats(all_old_path)
     if stats["total_listings"] == 0:
         st.warning("No cached data found")
         st.info("Use the Scraper page to collect some car listings first!")
@@ -60,7 +57,7 @@ def show_data_storage_page(all_old_path, latest_new_path):
         # Cache management button
         if st.button("🗑️ Clear All Cache", type="secondary"):
             if st.session_state.get('confirm_clear_all', False):
-                result = clear_all_caches()
+                result = get_storage_service().clear_all_caches()
                 st.success(result["message"])
                 st.session_state.confirm_clear_all = False
                 st.rerun()
@@ -87,7 +84,7 @@ def show_data_storage_page(all_old_path, latest_new_path):
         with col4:
             if st.button("🔍 Apply Filters", type="primary"):
                 # Apply filters and update session state
-                filtered_listings = get_listings_by_search_criteria(
+                filtered_listings = get_statistics_service().get_listings_by_search_criteria(
                     all_old_path, 
                     search_term=search_term if search_term else None,
                     min_price=min_price,
@@ -107,7 +104,7 @@ def show_data_storage_page(all_old_path, latest_new_path):
             filtered_listings = st.session_state.current_filtered_listings
         else:
             # Show all listings by default
-            filtered_listings = get_all_cached_listings(all_old_path)
+            filtered_listings = get_statistics_service().get_all_cached_listings(all_old_path)
         
         if filtered_listings:
             st.info(f"📋 Showing {len(filtered_listings)} listings")
@@ -165,7 +162,7 @@ def show_data_storage_page(all_old_path, latest_new_path):
                 
                 with col1:
                     if st.button(f"🗑️ Remove Selected", type="secondary"):
-                        removed_count = remove_listings_by_ids(selected_urls, all_old_path)
+                        removed_count = get_storage_service().remove_listings_by_ids(selected_urls, all_old_path)
                         st.success(f"✅ Removed {removed_count} listings from cache")
                         # Clear filtered listings to refresh
                         if 'current_filtered_listings' in st.session_state:
@@ -176,7 +173,7 @@ def show_data_storage_page(all_old_path, latest_new_path):
                     if st.button(f"📤 Send to Telegram", type="primary"):
                         with st.spinner(f"Sending {len(selected_listings)} listings..."):
                             try:
-                                success_count, failed = manual_send_listings(
+                                success_count, failed = get_notification_service().manual_send_listings(
                                     selected_listings,
                                     send_telegram_message=send_telegram_message,
                                     format_car_listing_message=format_car_listing_message,
@@ -219,12 +216,12 @@ def show_data_storage_page(all_old_path, latest_new_path):
             analysis_listings = st.session_state.current_filtered_listings
             st.info(f"📊 Analytics based on {len(analysis_listings)} filtered results")
         else:
-            analysis_listings = get_all_cached_listings(all_old_path)
+            analysis_listings = get_statistics_service().get_all_cached_listings(all_old_path)
             st.info(f"📊 Analytics based on all {len(analysis_listings)} cached listings")
         
         if analysis_listings:
             # Show detailed statistics
-            avg_price, total_count, prices = show_statistics(analysis_listings)
+            avg_price, total_count, prices = get_statistics_service().show_statistics(analysis_listings)
             
             col1, col2, col3, col4 = st.columns(4)
             with col1:

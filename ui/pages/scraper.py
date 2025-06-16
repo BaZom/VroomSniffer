@@ -2,82 +2,36 @@ import streamlit as st
 import sys
 import json
 import time
-import base64
-import random
 from pathlib import Path
 
 # Add the parent directory to the path so we can import from local modules
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-# Import services
-from services.storage_service import StorageService
-from services.url_pool_service import UrlPoolService
-from services.scraper_service import ScraperService
-from services.notification_service import NotificationService
-from services.scheduler_service import SchedulerService
+# Import services via the provider pattern
+from providers.services_provider import (
+    get_storage_service,
+    get_url_pool_service,
+    get_scraper_service,
+    get_notification_service,
+    get_scheduler_service
+)
 
-# For backwards compatibility, keep the old imports
-from services.vroomsniffer_service import get_listings_for_filter, manual_send_listings
-from notifier.telegram import send_telegram_message, format_car_listing_message
+# Import UI components
+from ui.components.sound_effects import play_sound
+from ui.components.ui_components import display_scrape_results
+from ui.components.metrics import display_metrics_row
+from ui.components.state_management import initialize_scraper_state
+from ui.components.styles import get_main_styles
+from ui.components.telegram_controls import send_listings_to_telegram
+from ui.components.url_management import display_url_management
+from ui.components.scraper_controls import display_scraper_controls, display_scraper_progress
 
-# Initialize services directly at module level
-# This improves efficiency and ensures services are reused
-storage_service = StorageService()
-notification_service = NotificationService()
-scraper_service = ScraperService(storage_service)
-url_pool_service = UrlPoolService()
-scheduler_service = SchedulerService()
-
-def play_sound(sound_file):
-    """Play a sound effect using Streamlit's audio component."""
-    try:
-        # Check if sound effects are enabled
-        if not st.session_state.get('sound_effects_enabled', True):
-            return
-            
-        sound_path = Path(__file__).parent.parent / "resources" / "sounds" / sound_file
-        if sound_path.exists():
-            with open(sound_path, "rb") as audio_file:
-                audio_bytes = audio_file.read()
-            
-            # Use hidden HTML audio for background sound effects
-            audio_base64 = base64.b64encode(audio_bytes).decode()
-            audio_format = "audio/wav" if sound_file.endswith('.wav') else "audio/mpeg"
-            
-            # Multiple HTML approaches for better browser compatibility
-            audio_html = f"""
-            <script>
-                // Try multiple methods to play audio
-                try {{
-                    // Method 1: Create and play audio element
-                    var audio = new Audio('data:{audio_format};base64,{audio_base64}');
-                    audio.volume = 0.5;
-                    audio.play().catch(function(e) {{
-                        console.log('Audio play failed:', e);
-                    }});
-                }} catch(e) {{
-                    console.log('Audio creation failed:', e);
-                }}
-            </script>
-            <audio controls autoplay style="display:none;">
-                <source src="data:{audio_format};base64,{audio_base64}" type="{audio_format}">
-            </audio>
-            """
-            st.markdown(audio_html, unsafe_allow_html=True)
-            
-            # Add delay to let sound complete before continuing
-            import time
-            time.sleep(2.5)  # Allow 2.5 seconds for sound to play completely
-            
-    except Exception as e:
-        # Show error in debug mode
-        if st.session_state.get('debug_mode', False):
-            st.error(f"Sound playback error: {e}")
-        pass
-
-def build_search_url_from_custom(custom_url):
-    """Validate and return custom URL only if it's a proper HTTP/HTTPS URL."""
-    return url_pool_service.build_search_url_from_custom(custom_url)
+# Initialize services via the provider
+storage_service = get_storage_service()
+notification_service = get_notification_service()
+scraper_service = get_scraper_service()
+url_pool_service = get_url_pool_service()
+scheduler_service = get_scheduler_service()
 
 def _show_system_status():
     """Display system status with clean metrics layout matching home page."""
@@ -109,19 +63,16 @@ def _show_system_status():
         total_listings = 0
         recent_additions = 0
         cache_size_mb = 0
-      # Clean metrics layout (same as home page)
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Total Listings", total_listings)
-    with col2:
-        st.metric("Recent Additions", recent_additions)
-    with col3:
-        if cache_size_mb > 0:
-            st.metric("Cache Size", f"{cache_size_mb} MB")
-        else:
-            st.metric("Cache Size", "< 0.01 MB")
-    with col4:
-        st.metric("Total Runs", scheduler_service.get_total_runs())
+
+    # Use metrics component
+    metrics_data = [
+        {'label': 'Total Listings', 'value': total_listings},
+        {'label': 'Recent Additions', 'value': recent_additions},
+        {'label': 'Cache Size', 'value': f"{cache_size_mb} MB" if cache_size_mb > 0 else "< 0.01 MB"},
+        {'label': 'Total Runs', 'value': scheduler_service.get_total_runs()}
+    ]
+    
+    display_metrics_row(metrics_data, 4)
     
     # Status message
     status_text = "🟢 ACTIVE" if scheduler_service.is_scraping_active() else "🔴 STOPPED"
@@ -131,73 +82,6 @@ def _show_system_status():
     else:
         st.warning(f"⏸️ {scraper_info}")
 
-def _display_url_pool():
-    """Display current URL pool."""
-    if st.session_state.url_pool:
-        st.subheader(f"🔗 URL Pool ({len(st.session_state.url_pool)} URLs)")
-        
-        for i, url in enumerate(st.session_state.url_pool):
-            if (scheduler_service.is_scraping_active() and 
-                scheduler_service.is_next_url_selected() and 
-                i == scheduler_service.get_next_url_index()):
-                st.markdown(f'<div class="next-url">🎯 NEXT: {url}</div>', unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div class="url-item">{i+1}. {url}</div>', unsafe_allow_html=True)
-    else:
-        st.info("No URLs in pool. Add URLs to start scraping.")
-
-def _display_scrape_results(results):
-    """Display scraping results."""
-    if not results:
-        return
-        
-    # Only show results once per scrape
-    result_timestamp = results.get('timestamp', 0)
-    if 'last_displayed_result' not in st.session_state:
-        st.session_state.last_displayed_result = 0
-    
-    if result_timestamp <= st.session_state.last_displayed_result:
-        return
-    
-    st.session_state.last_displayed_result = result_timestamp
-    
-    st.subheader("📊 Results")
-    
-    with st.container():
-        st.markdown('<div class="status-card">', unsafe_allow_html=True)
-        
-        new_listings = results.get('new_listings', [])
-        scraped_url = results.get('url', '')
-        url_num = results.get('url_index', 0) + 1
-        
-        st.write(f"**🔗 URL #{url_num}:** {scraped_url}")
-        
-        if new_listings:
-            st.write(f"**✅ Result:** {len(new_listings)} new listings found")
-        else:
-            st.write(f"**🔍 Result:** No new listings found")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-
-def _send_listings_to_telegram(listings):
-    """Send listings to Telegram using NotificationService."""
-    try:
-        # notification_service already defined at module level
-        success_count, failed = notification_service.manual_send_listings(
-            listings,
-            parse_mode="HTML",
-            retry_on_network_error=True
-        )
-        
-        if success_count > 0:
-            st.success(f"Sent {success_count}/{len(listings)} listings to Telegram")
-        
-        if failed:
-            st.error(f"Failed to send {len(failed)} listings")
-            
-    except Exception as e:
-        st.error(f"Telegram sending failed: {str(e)}")
-
 def show_scraper_page(all_old_path, latest_new_path, root_dir):
     """Multi-URL scraper with clean interface."""
     
@@ -205,95 +89,13 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
     st.session_state.all_old_path = all_old_path
     st.session_state.latest_new_path = latest_new_path
     
-    # VroomSniffer color scheme styling
-    st.markdown("""
-    <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}    /* Simple text styling - no boxes */
+    # Apply centralized styles from components
+    st.markdown(get_main_styles(), unsafe_allow_html=True)
     
-    .status-card {
-        background-color: white;
-        border: 1px solid #D7E9F7;
-        border-radius: 8px;
-        padding: 1rem;
-        margin: 0.5rem 0;
-        box-shadow: 0 1px 3px rgba(18, 60, 90, 0.1);
-    }
+    # Use the state management component for consistent initialization
+    initialize_scraper_state(url_pool_service)
     
-    .url-item {
-        background-color: #F4F4F4;
-        border: 1px solid #D7E9F7;
-        border-radius: 6px;
-        padding: 0.8rem;
-        margin: 0.3rem 0;
-        font-family: monospace;
-        font-size: 0.9em;
-        color: #333333;
-    }
-    
-    .next-url {
-        background-color: #D7E9F7;
-        border: 2px solid #F57C00;
-        border-radius: 6px;
-        padding: 0.8rem;
-        margin: 0.3rem 0;
-        font-weight: bold;
-        font-family: monospace;
-        font-size: 0.9em;
-        color: #123C5A;
-    }
-    
-    .stButton > button {
-        height: 2.5rem !important;
-        font-size: 0.9rem !important;
-        padding: 0.5rem 1rem !important;
-        min-width: 120px !important;
-        margin: 0.2rem 0 !important;
-        border-radius: 6px !important;
-        border: 1px solid #123C5A !important;
-        background-color: white !important;
-        color: #333333 !important;
-    }
-    
-    .stButton > button:hover {
-        background-color: #D7E9F7 !important;
-        border-color: #123C5A !important;
-        color: #123C5A !important;
-    }
-    
-    .stButton > button[kind="primary"] {
-        background-color: white !important;
-        color: #F57C00 !important;
-        border-color: #F57C00 !important;
-        font-weight: 600 !important;
-    }
-    
-    .stButton > button[kind="primary"]:hover {
-        background-color: #D7E9F7 !important;
-        border-color: #F57C00 !important;
-        color: #F57C00 !important;
-    }
-    
-    /* Divider styling */
-    hr {
-        border: none;
-        border-top: 1px solid #e0e0e0;
-        margin: 1.5rem 0;
-    }
-    </style>
-    """, unsafe_allow_html=True)    # Initialize session state
-    if 'url_pool' not in st.session_state:
-        st.session_state.url_pool = []
-        # Load saved URLs on first initialization
-        saved_urls = url_pool_service.load_saved_urls()
-        st.session_state.url_pool.extend(saved_urls)
-    if 'auto_send_active' not in st.session_state:
-        st.session_state.auto_send_active = False
-    if 'latest_results' not in st.session_state:
-        st.session_state.latest_results = {}
-    if 'sound_effects_enabled' not in st.session_state:
-        st.session_state.sound_effects_enabled = False
+    # Additional state specific to this page
     if 'scraping_active' not in st.session_state:
         st.session_state.scraping_active = scheduler_service.is_scraping_active()
         
@@ -315,131 +117,19 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
     
     st.divider()
     
-    # URL Management
-    st.subheader("🔧 URL Management")
-    
-    # Load saved URLs on first load
-    if 'saved_urls_loaded' not in st.session_state:
-        saved_urls = url_pool_service.load_saved_urls()
-        st.session_state.url_pool.extend([url for url in saved_urls if url not in st.session_state.url_pool])
-        st.session_state.saved_urls_loaded = True
-    
-    # URL input
-    new_url = st.text_input("Enter search URL:", placeholder="https://marketplace-url.com/search...")
-    
-    # URL management buttons
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        if st.button("Add URL", type="primary", use_container_width=True):
-            built_url = build_search_url_from_custom(new_url)
-            if built_url and built_url not in st.session_state.url_pool:
-                st.session_state.url_pool.append(built_url)
-                url_pool_service.add_url_to_storage(built_url)
-                st.success("✅ URL added!")
-            elif built_url in st.session_state.url_pool:
-                st.warning("⚠️ URL already exists")
-            else:
-                st.error("❌ Invalid URL (must start with http:// or https://)")
-    
-    with col2:
-        if st.button("Load Saved URLs", use_container_width=True):
-            saved_urls = url_pool_service.load_saved_urls()
-            if not saved_urls:
-                st.info("📭 No URLs found in storage")
-            else:
-                added_count = 0
-                for url in saved_urls:
-                    # Validate saved URLs before adding
-                    if url.startswith(('http://', 'https://')) and url not in st.session_state.url_pool:
-                        st.session_state.url_pool.append(url)
-                        added_count += 1
-                        
-                if added_count > 0:
-                    st.success(f"✅ Loaded {added_count} URLs!")
-                else:
-                    st.info("ℹ️ No new URLs to load")
-    
-    with col3:
-        if st.button("Clear Pool", use_container_width=True):
-            st.session_state.url_pool = []
-            scheduler_service.stop_scraping()  # Use scheduler service instead of session state
-            st.success("✅ Pool cleared!")
-    
-    with col4:
-        if st.button("Clear Storage", use_container_width=True):
-            if url_pool_service.clear_url_storage():
-                st.success("✅ Storage cleared!")
-            else:
-                st.error("❌ Failed to clear storage")
-    
-    # Display current URL pool with remove functionality
-    if st.session_state.url_pool:
-        st.subheader(f"📋 Current URL Pool ({len(st.session_state.url_pool)} URLs)")
-        
-        for i, url in enumerate(st.session_state.url_pool):
-            col1, col2 = st.columns([4, 1])
-            with col1:
-                # Show URL with truncation for long URLs
-                display_url = url if len(url) <= 60 else f"{url[:60]}..."
-                  # Highlight the next URL to be scraped
-                if (scheduler_service.is_scraping_active() and 
-                    scheduler_service.is_next_url_selected() and 
-                    i == scheduler_service.get_next_url_index()):
-                    st.markdown(f'<div class="next-url">🎯 NEXT: {i+1}. {display_url}</div>', unsafe_allow_html=True)
-                else:
-                    st.markdown(f'<div class="url-item">{i+1}. {display_url}</div>', unsafe_allow_html=True)
-            with col2:
-                if st.button("🗑️", key=f"remove_{i}", help="Remove from pool"):
-                    st.session_state.url_pool.pop(i)
-                    st.rerun()
-    else:
-        st.info("📭 No URLs in pool. Add some URLs to get started!")
+    # URL Management using component
+    url_pool_modified = display_url_management(url_pool_service, scheduler_service)
+    if url_pool_modified:
+        st.rerun()  # Refresh the UI if URLs were modified
     
     st.divider()
-      # Controls
-    st.subheader("⚙️ Controls")
     
-    # Adjacent buttons for Start/Stop and Auto-send toggle
-    col1, col2, col3 = st.columns([1.5, 2, 1.5])
+    # Controls using component
+    controls_changed = display_scraper_controls(scheduler_service)
+    if controls_changed:
+        st.rerun()  # Refresh the UI if controls were changed
     
-    with col1:
-        if not scheduler_service.is_scraping_active():
-            if st.button("▶️ Start", type="primary", use_container_width=True):
-                if st.session_state.url_pool:
-                    scheduler_service.start_scraping()
-                    
-                    # Pre-select first URL using scheduler service
-                    scheduler_service.select_next_url_index(len(st.session_state.url_pool))
-                    
-                    st.success("🚀 Started!")
-                    play_sound("Vroom 1.mp3")  # Play start sound effect
-                    st.rerun()
-                else:
-                    st.error("Add URLs first")
-        else:
-            if st.button("⏹️ Stop", use_container_width=True):
-                scheduler_service.stop_scraping()
-                st.success("⏹️ Stopped!")
-                st.rerun()
-    
-    with col2:
-        st.session_state.auto_send_active = st.checkbox("📤 Auto-send to Telegram", value=st.session_state.auto_send_active)
-        st.session_state.sound_effects_enabled = st.checkbox(
-            "🔊 Sound Effects", 
-            value=st.session_state.sound_effects_enabled,
-            help="Enable/disable sound effects for scraping events"
-        )
-    
-    with col3:
-        interval = st.number_input(
-            "Interval (sec):", 
-            min_value=scheduler_service.MIN_INTERVAL, 
-            max_value=scheduler_service.MAX_INTERVAL, 
-            value=scheduler_service.get_interval(),
-            step=30
-        )
-        # Update scheduler service with new interval
-        scheduler_service.set_interval(interval)    # Active Scraping Logic
+    # Active Scraping Logic
     if scheduler_service.is_scraping_active() and st.session_state.url_pool:
         if scheduler_service.is_time_to_scrape():
             current_time = time.time()
@@ -460,7 +150,7 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
                     # Use our ScraperService instance from the module level
                     results = scraper_service.get_listings_for_filter(
                         filters,
-                        build_search_url_from_custom,
+                        url_pool_service.build_search_url_from_custom,
                         all_old_path, 
                         latest_new_path,
                         root_dir
@@ -482,8 +172,9 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
                     
                     # Auto-send if enabled
                     if st.session_state.auto_send_active and new_listings:
-                        _send_listings_to_telegram(new_listings)
-                      # Update counters using scheduler service
+                        send_listings_to_telegram(notification_service, new_listings)
+                    
+                    # Update counters using scheduler service
                     total_runs = scheduler_service.record_scrape()
                     st.session_state.total_runs = total_runs  # Keep UI in sync
                     
@@ -503,22 +194,15 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
     # Show Results Section
     if st.session_state.latest_results:
         st.divider()
-
+        
     # Display Results
-    _display_scrape_results(st.session_state.latest_results)
-      # Progress Display
+    display_scrape_results(st.session_state.latest_results)
+      
+    # Progress Display using component
+    display_scraper_progress(scheduler_service)
+        
+    # Auto-refresh if scraping is active
     if scheduler_service.is_scraping_active():
-        time_until_next = scheduler_service.get_time_until_next_scrape()
-        progress = scheduler_service.get_progress_percentage()
-        
-        if time_until_next > 0:
-            progress_container = st.empty()
-            progress_container.progress(progress, text=f"⏰ Next scrape in {int(time_until_next)} seconds")
-        else:
-            ready_container = st.empty()
-            ready_container.progress(1.0, text="🔍 Ready to scrape...")
-        
-        # Auto-refresh
         time.sleep(2)
         st.rerun()
     else:

@@ -5,7 +5,9 @@ from pathlib import Path
 # Add the parent directory to the path so we can import from local modules
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from ui.telegram_controls import telegram_test_button
+# Import services and components
+from providers.services_provider import get_notification_service
+from ui.components.telegram_controls import telegram_test_button
 
 def show_playground_page(all_old_path, latest_new_path, root_dir):
     """Clean playground page for testing and experimentation."""
@@ -97,9 +99,9 @@ def show_playground_page(all_old_path, latest_new_path, root_dir):
     with tab3:
         st.subheader("Test Telegram Messages")
         st.caption("Test Telegram bot connectivity and message formatting")
-        
-        # Telegram test button moved from main scraper
-        telegram_test_button()
+          # Telegram test button moved from main scraper
+        notification_service = get_notification_service()
+        telegram_test_button(notification_service)
         
         st.write("---")
         

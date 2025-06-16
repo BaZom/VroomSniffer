@@ -54,21 +54,23 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
-# Import services instead of direct imports
-from services.storage_service import StorageService
-from services.notification_service import NotificationService
-from services.scraper_service import ScraperService
-from services.scheduler_service import SchedulerService
-from services.url_pool_service import UrlPoolService
-from services.statistics_service import StatisticsService
+# Import services via the provider pattern
+from providers.services_provider import (
+    get_storage_service,
+    get_notification_service,
+    get_scraper_service,
+    get_scheduler_service,
+    get_url_pool_service,
+    get_statistics_service
+)
 
-# Initialize service instances
-storage_service = StorageService()
-notification_service = NotificationService()
-scraper_service = ScraperService(storage_service)
-scheduler_service = SchedulerService()
-url_pool_service = UrlPoolService()
-statistics_service = StatisticsService(storage_service)
+# Initialize services via the provider
+storage_service = get_storage_service()
+notification_service = get_notification_service()
+scraper_service = get_scraper_service()
+scheduler_service = get_scheduler_service()
+url_pool_service = get_url_pool_service()
+statistics_service = get_statistics_service()
 
 def _check_listings_exist():
     """Helper function to check if listings exist and print error if not"""
