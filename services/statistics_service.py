@@ -100,6 +100,18 @@ class StatisticsService:
             'prices': prices
         }
     
+    def get_all_cached_listings(self, cache_path=None):
+        """
+        Get all cached listings as a list - delegates to StorageService
+        
+        Args:
+            cache_path: Path to retrieve from
+            
+        Returns:
+            list: All listings in cache
+        """
+        return self.storage_service.get_all_cached_listings(cache_path)
+        
     def create_price_distribution_chart(self, prices, bins=20):
         """
         Create price distribution chart data.
@@ -161,3 +173,15 @@ class StatisticsService:
             'mid': mid_price,
             'high': high_price
         }
+    
+    def get_cache_stats(self, cache_path=None):
+        """
+        Get cache statistics - delegates to StorageService
+        
+        Args:
+            cache_path: Path to retrieve stats from
+            
+        Returns:
+            dict: Cache statistics
+        """
+        return self.storage_service.get_cache_stats(cache_path)

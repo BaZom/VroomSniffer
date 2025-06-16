@@ -82,13 +82,12 @@ def show_data_storage_page(all_old_path, latest_new_path):
         with col3:
             max_price = st.number_input("Max Price (€)", min_value=0, value=None, step=1000)
         with col4:
-            if st.button("🔍 Apply Filters", type="primary"):
-                # Apply filters and update session state
+            if st.button("🔍 Apply Filters", type="primary"):                # Apply filters and update session state
                 filtered_listings = get_statistics_service().get_listings_by_search_criteria(
-                    all_old_path, 
                     search_term=search_term if search_term else None,
                     min_price=min_price,
-                    max_price=max_price
+                    max_price=max_price,
+                    cache_path=all_old_path
                 )
                 st.session_state.current_filtered_listings = filtered_listings
                 st.rerun()
