@@ -418,24 +418,12 @@ def notify_new_listings(new_listings, count=5):
     
     print(f"[*] Sending summary notification for {len(new_listings)} new listings...")
     
-    # Create summary message
-    summary_msg = f"🔥 <b>New Car Listings Found</b>\n\n"
-    summary_msg += f"📊 Found {len(new_listings)} new listings\n"
-    
-    if new_listings:
-        # Add preview of top new listings
-        max_preview = min(3, len(new_listings))
-        summary_msg += "\n<b>New Listings:</b>\n"
-        for i, listing in enumerate(new_listings[:max_preview]):
-            title = listing.get("Title", "Unknown")
-            if len(title) > 50:
-                title = title[:50] + "..."
-            price = listing.get("Price", "Unknown")
-            summary_msg += f"{i+1}. {title} - {price}\n"
-    
-    summary_msg += f"\n💡 Use CLI to explore: 'python cli/main.py list --type new'"
-      # Send the summary message
-    success, _ = notification_service.send_telegram_message(summary_msg)
+    # Use the notification service to send summary notification
+    success = notification_service.send_summary_notification(
+        new_listings,
+        search_keyword="New Listings", 
+        max_preview=3
+    )
     
     if success:
         print(f"[+] Summary notification sent for {len(new_listings)} new listings")
@@ -443,41 +431,20 @@ def notify_new_listings(new_listings, count=5):
         print(f"[!] Failed to send summary notification")
         return
         
-    # If requested, also send individual notifications for top X new listings
-    if count > 0 and count <= len(new_listings):
+    # If requested, also send individual notifications for top X new listings    if count > 0 and count <= len(new_listings):
         print(f"[*] Sending individual notifications for top {count} new listings...")
         
-        # Use tqdm to create a progress bar
-        try:
-            from tqdm import tqdm
-            has_tqdm = True
-        except ImportError:
-            has_tqdm = False
-            
-        # Send each listing
-        if has_tqdm:
-            listings_iter = tqdm(new_listings[:count], desc="Sending detailed notifications", unit="listing")
-        else:
-            listings_iter = new_listings[:count]
-        
-        success_count = 0
-        for i, listing in enumerate(listings_iter):
-            success = notification_service.send_listing(listing)
-            
-            if success:
-                success_count += 1
-            else:
-                if has_tqdm:
-                    tqdm.write(f"[!] Failed to send detailed notification {i+1}")
-                else:
-                    print(f"[!] Failed to send detailed notification {i+1}")
-                    
-            # Add delay between messages
-            if i < count - 1:  # If not the last message
-                import time
-                time.sleep(2)
+        # Use the notification service to send individual listings
+        detailed_listings = new_listings[:count]
+        success_count, failed = notification_service.manual_send_listings(
+            detailed_listings,
+            parse_mode="HTML",
+            retry_on_network_error=True
+        )
         
         print(f"[+] Sent {success_count}/{count} detailed notifications successfully.")
+        if failed:
+            print(f"[!] Failed to send {len(failed)} listings")
 
 def load_saved_urls():
     """
@@ -672,9 +639,7 @@ For more advanced features, use the Streamlit UI:
     elif args.command == "schedule":
         try:
             # Load URLs - either from command line or saved_urls.json
-            urls = []
-            
-            # If --use-saved flag is set or no URLs provided, load from saved_urls.json
+            urls = []            # If --use-saved flag is set or no URLs provided, load from saved_urls.json
             if args.use_saved or not args.urls:
                 urls = load_saved_urls()
                 if not urls:
@@ -702,22 +667,17 @@ For more advanced features, use the Streamlit UI:
             # Loop until we hit max runs (if specified) or until manually stopped
             while (args.runs == 0 or runs_completed < args.runs) and scheduler_service.is_scraping_active():
                 if scheduler_service.is_time_to_scrape():
-                    print(f"\n[*] Run {runs_completed + 1}/{args.runs}")
-                      # Select URL(s) - either randomly or sequentially
-                    run_urls = []
-                    if args.random:
-                        # Force re-seeding of random for true randomness on each selection
-                        random.seed()
-                        # Pick a random URL
-                        selected_url = random.choice(urls)
-                        run_urls = [selected_url]
-                        print(f"[*] Randomly selected URL: {selected_url}")
-                    else:
-                        # Use the next URL in sequence
-                        url_index = runs_completed % len(urls)
-                        selected_url = urls[url_index]
-                        run_urls = [selected_url]
-                        print(f"[*] Using URL {url_index + 1}/{len(urls)}: {selected_url}")
+                    print(f"\n[*] Run {runs_completed + 1}/{args.runs}")                    # Use scheduler service for URL selection
+                    url_index = scheduler_service.select_next_url_index(
+                        url_count=len(urls),
+                        random_selection=args.random,
+                        current_run=runs_completed
+                    )
+                    selected_url = urls[url_index]
+                    run_urls = [selected_url]
+                    
+                    selection_mode = "Random" if args.random else "Sequential"
+                    print(f"[*] {selection_mode} URL selection: {selected_url} (index {url_index+1}/{len(urls)})")
                     
                     # Use a default of 3 for notify_count if not explicitly specified
                     notify_count = getattr(args, 'notify_count', 3)

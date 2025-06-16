@@ -25,9 +25,13 @@ def display_scraper_controls(scheduler_service):
             if st.button("▶️ Start", type="primary", use_container_width=True):
                 if st.session_state.url_pool:
                     scheduler_service.start_scraping()
-                    
-                    # Pre-select first URL using scheduler service
-                    scheduler_service.select_next_url_index(len(st.session_state.url_pool))
+                      # Pre-select first URL using scheduler service with user's selection mode
+                    random_selection = st.session_state.get('random_url_selection', True)
+                    scheduler_service.select_next_url_index(
+                        url_count=len(st.session_state.url_pool),
+                        random_selection=random_selection,
+                        current_run=scheduler_service.get_total_runs()
+                    )
                     
                     st.success("🚀 Started!")
                     play_sound("Vroom 1.mp3")  # Play start sound effect
@@ -40,10 +44,10 @@ def display_scraper_controls(scheduler_service):
                 st.success("⏹️ Stopped!")
                 changed = True
     
-    with col2:
-        # Store previous state to detect changes
+    with col2:        # Store previous state to detect changes
         prev_auto_send = st.session_state.get('auto_send_active', False)
         prev_sound_effects = st.session_state.get('sound_effects_enabled', False)
+        prev_random_selection = st.session_state.get('random_url_selection', True)
         
         st.session_state.auto_send_active = st.checkbox(
             "📤 Auto-send to Telegram", 
@@ -56,8 +60,15 @@ def display_scraper_controls(scheduler_service):
             help="Enable/disable sound effects for scraping events"
         )
         
+        # Add random URL selection toggle
+        st.session_state.random_url_selection = st.checkbox(
+            "🎲 Random URL Selection", 
+            value=st.session_state.get('random_url_selection', True),
+            help="Select URLs randomly instead of sequentially"
+        )
         if (prev_auto_send != st.session_state.auto_send_active or 
-            prev_sound_effects != st.session_state.sound_effects_enabled):
+            prev_sound_effects != st.session_state.sound_effects_enabled or
+            prev_random_selection != st.session_state.random_url_selection):
             changed = True
     
     with col3:

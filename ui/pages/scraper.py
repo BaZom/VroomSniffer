@@ -106,11 +106,16 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
     elif 'total_runs' in st.session_state:
         # This is a reload - set scheduler state from session
         scheduler_service.set_total_runs(st.session_state.total_runs)
-    
-    # Let scheduler handle next URL selection
+      # Let scheduler handle next URL selection
     if scheduler_service.is_scraping_active() and st.session_state.url_pool:
         if not scheduler_service.is_next_url_selected() or scheduler_service.get_next_url_index() >= len(st.session_state.url_pool):
-            scheduler_service.select_next_url_index(len(st.session_state.url_pool))
+            # Use random or sequential selection based on user preference
+            random_selection = st.session_state.get('random_url_selection', True)
+            scheduler_service.select_next_url_index(
+                url_count=len(st.session_state.url_pool),
+                random_selection=random_selection,
+                current_run=scheduler_service.get_total_runs()
+            )
     
     # System Status
     _show_system_status()
@@ -177,9 +182,13 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
                     # Update counters using scheduler service
                     total_runs = scheduler_service.record_scrape()
                     st.session_state.total_runs = total_runs  # Keep UI in sync
-                    
-                    # Pre-select next URL using scheduler service
-                    scheduler_service.select_next_url_index(len(st.session_state.url_pool))
+                      # Pre-select next URL using scheduler service with user's selection mode
+                    random_selection = st.session_state.get('random_url_selection', True)
+                    scheduler_service.select_next_url_index(
+                        url_count=len(st.session_state.url_pool),
+                        random_selection=random_selection,
+                        current_run=total_runs
+                    )
                     
                     # Show results
                     if new_listings:

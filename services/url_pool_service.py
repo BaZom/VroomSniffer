@@ -122,3 +122,63 @@ class UrlPoolService:
             if url.startswith(('http://', 'https://')) and '.' in url:
                 return url
         return ""
+    
+    def select_url(self, index=None, random_selection=False):
+        """
+        Select a URL from the saved pool
+        
+        Args:
+            index: Index of URL to select (for sequential selection)
+            random_selection: Whether to select randomly
+            
+        Returns:
+            str: Selected URL or empty string if none available
+        """
+        urls = self.load_saved_urls()
+        if not urls:
+            return ""
+        
+        if random_selection:
+            import random
+            random.seed()  # Re-seed for true randomness
+            return random.choice(urls)
+        
+        # Sequential selection
+        if index is None or index < 0 or index >= len(urls):
+            index = 0
+        return urls[index]
+    
+    def select_url_batch(self, batch_size=1, random_selection=False, start_index=0):
+        """
+        Select multiple URLs from the saved pool
+        
+        Args:
+            batch_size: Number of URLs to select
+            random_selection: Whether to select randomly
+            start_index: Starting index for sequential selection
+            
+        Returns:
+            list: Selected URLs
+        """
+        urls = self.load_saved_urls()
+        if not urls or batch_size <= 0:
+            return []
+            
+        if random_selection:
+            import random
+            random.seed()  # Re-seed for true randomness
+            # Sample with replacement if batch size is larger than available URLs
+            if batch_size >= len(urls):
+                return urls
+            else:
+                return random.sample(urls, batch_size)
+        
+        # Sequential selection
+        result = []
+        index = start_index % len(urls) if urls else 0
+        
+        for _ in range(batch_size):
+            result.append(urls[index])
+            index = (index + 1) % len(urls)
+            
+        return result

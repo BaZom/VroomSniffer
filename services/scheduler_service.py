@@ -116,7 +116,6 @@ class SchedulerService:
         elapsed = time.time() - self.last_scrape_time
         remaining = self.interval_seconds - elapsed
         return max(0, remaining)
-    
     def get_progress_percentage(self):
         """
         Calculate progress as percentage toward next scrape
@@ -126,17 +125,19 @@ class SchedulerService:
         """
         if not self.scraping_active or self.interval_seconds == 0:
             return 0.0
-            
+        
         remaining = self.get_time_until_next_scrape()
         progress = 1.0 - (remaining / self.interval_seconds)
         return max(0.0, min(1.0, progress))  # Constrain between 0 and 1
-    
-    def select_next_url_index(self, url_count):
+        
+    def select_next_url_index(self, url_count, random_selection=True, current_run=None):
         """
         Select the next URL index to scrape
         
         Args:
             url_count: Number of URLs in the pool
+            random_selection: Whether to select randomly (True) or sequentially (False)
+            current_run: Current run number for sequential selection (used for cycling through URLs)
             
         Returns:
             int: The selected URL index
@@ -147,7 +148,7 @@ class SchedulerService:
             self.next_url_index = 0
         elif url_count == 1:
             self.next_url_index = 0
-        else:
+        elif random_selection:
             # Pick a random URL, but avoid picking the same one twice in a row
             current = self.next_url_index
             self.next_url_index = random.randint(0, url_count - 1)
@@ -155,6 +156,13 @@ class SchedulerService:
             # If we got the same index and there are multiple URLs, try once more
             if self.next_url_index == current and url_count > 1:
                 self.next_url_index = random.randint(0, url_count - 1)
+        else:
+            # Sequential selection based on run number
+            if current_run is not None:
+                self.next_url_index = current_run % url_count
+            else:
+                # Just increment by 1 and wrap around
+                self.next_url_index = (self.next_url_index + 1) % url_count
                 
         self.next_url_selected = True
         return self.next_url_index
