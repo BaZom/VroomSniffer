@@ -23,3 +23,16 @@ scraper/*.json
 
 # Temporary files
 *.tmp
+
+# Backup and variant files
+*_backup.*
+*_clean.*
+*_new.*
+*_fixed.*
+*_with_*.*
+ui/page_modules/
+ui/pages/backups/
+
+# Generated resources
+ui/resources/vroomsniffer_logo.png
+ui/styles/
