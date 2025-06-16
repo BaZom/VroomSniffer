@@ -4,21 +4,19 @@ Cache management UI components for Streamlit
 import streamlit as st
 import pandas as pd
 from pathlib import Path
-from services.vroomsniffer_service import (
-    get_all_cached_listings,
-    remove_listings_by_ids,
-    clear_cache,
-    get_cache_stats,
-    get_listings_by_search_criteria,
-    clear_all_caches
-)
+
+# Import services directly instead of using vroomsniffer_service facade
+from services.storage_service import StorageService
+
+# Initialize services
+storage_service = StorageService()
 
 def display_cache_management(cache_path):
     """Display cache management interface"""
     st.subheader("🗂️ Cache Management")
     
     # Get cache statistics
-    stats = get_cache_stats(cache_path)
+    stats = storage_service.get_cache_stats(cache_path)
     
     # Top row: Stats and Action buttons
     col1, col2, col3 = st.columns([2, 1, 1])
@@ -43,7 +41,7 @@ def display_cache_management(cache_path):
     with col3:
         if st.button("🗑️ Clear All", type="secondary", use_container_width=True):
             if st.session_state.get('confirm_clear_cache', False):
-                result = clear_all_caches()
+                result = storage_service.clear_all_caches()
                 st.success(result["message"])
                 st.session_state.confirm_clear_cache = False
                 # Clear any cached session state data
@@ -71,11 +69,11 @@ def display_cache_management(cache_path):
         max_price = st.number_input("Max Price (€)", min_value=0, value=None, step=1000)
     
     # Get filtered listings
-    filtered_listings = get_listings_by_search_criteria(
-        cache_path, 
+    filtered_listings = storage_service.get_listings_by_search_criteria(
         search_term=search_term if search_term else None,
         min_price=min_price,
-        max_price=max_price
+        max_price=max_price,
+        cache_path=cache_path
     )
     
     if not filtered_listings:
@@ -134,7 +132,7 @@ def display_cache_management(cache_path):
         col1, col2 = st.columns([1, 4])
         with col1:
             if st.button(f"🗑️ Remove {len(selected_urls)} Selected", type="primary"):
-                removed_count = remove_listings_by_ids(selected_urls, cache_path)
+                removed_count = storage_service.remove_listings_by_ids(selected_urls, cache_path)
                 st.success(f"✅ Removed {removed_count} listings from cache")
                 # Clear cache-related session state
                 for key in list(st.session_state.keys()):
@@ -146,7 +144,7 @@ def display_cache_management(cache_path):
 
 def display_cache_summary(cache_path):
     """Display a compact cache summary"""
-    stats = get_cache_stats(cache_path)
+    stats = storage_service.get_cache_stats(cache_path)
     
     if stats["total_listings"] > 0:
         st.sidebar.success(f"📊 Cache: {stats['total_listings']} listings")
@@ -157,7 +155,7 @@ def display_cache_summary(cache_path):
             
         if st.sidebar.button("🗑️ Quick Clear"):
             if st.sidebar.button("⚠️ Confirm Clear", type="secondary"):
-                clear_cache(cache_path)
+                storage_service.clear_cache(cache_path)
                 st.sidebar.success("Cache cleared!")
                 st.rerun()
     else:

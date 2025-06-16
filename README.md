@@ -6,18 +6,19 @@
 
 > **📝 Note: This is a hobby project created for educational and personal use only.**
 
-A modern, modular web scraping system designed to collect car listings from various online marketplaces, detect new listings, and send notifications via Telegram. Built with Python, Playwright, and Streamlit.
+A modern, service-oriented web scraping system designed to collect car listings from various online marketplaces, detect new listings, and send notifications via Telegram. Built with Python, Playwright, and Streamlit.
 
 ## ✨ Key Features
 
 - **🎭 Modern Web Scraping**: Playwright-based engine handles JavaScript-heavy sites
 - **🔄 Smart Deduplication**: Automatically detects and filters out duplicate listings
 - **📱 Telegram Notifications**: Get instant alerts for new car listings with rich formatting
+- **⏱️ Flexible Scheduling**: Configure custom intervals for automatic scraping
 - **🚀 Auto-Notifications**: Automatically send new listings as they're discovered
 - **🌐 Web Dashboard**: Interactive Streamlit interface with real-time monitoring
 - **⚡ CLI Interface**: Command-line tools for automation and scripting
-- **🔧 Modular Architecture**: Clean separation of concerns for easy maintenance
-- **📊 Multiple Storage Options**: SQLite for development, PostgreSQL for production
+- **🔧 Service-Oriented Architecture**: Clean separation of concerns with specialized services
+- **📊 Multiple Storage Options**: JSON-based storage with extensible service layer
 
 ## 🚀 Quick Start
 
@@ -74,7 +75,10 @@ The CLI provides the primary interface for running the scraper and managing resu
 python cli/main.py run "https://marketplace-url.com/search-cars"
 
 # Run with auto-notifications (sends new listings automatically)
-python scraper/engine.py --url "..." --notify --notify-count 3
+python cli/main.py run "https://marketplace-url.com/search-cars" --notify --notify-count 3
+
+# Schedule periodic scraping (every 60 seconds for 10 runs)
+python cli/main.py schedule "https://marketplace-url.com/search-cars" --interval 60 --runs 10 --notify
 
 # List the latest scraped listings
 python cli/main.py list
@@ -108,23 +112,25 @@ streamlit run ui/streamlit_app.py
 ```
 
 **Key Features:**
-- **🔄 Auto-monitoring**: Enable automatic scraping every 5 minutes
+- **🔄 Flexible Auto-monitoring**: Set custom intervals from 30 seconds to 1 hour
 - **📲 Auto-notifications**: Automatically send new listings to Telegram  
 - **🎛️ Interactive controls**: Manual monitoring with one click
 - **📊 Real-time analytics**: Price trends and statistics
 - **🔍 Advanced filtering**: Car make/model, price, year, transmission, mileage
+- **🧠 Smart URL Pool**: Manage multiple search URLs with automatic rotation
 
 **Auto-Monitoring Setup:**
-1. Configure your search filters (car make, price range, etc.)
-2. ✅ Check "🔄 Auto-run scraper every 5 minutes" 
-3. ✅ Check "📲 Auto-send new listings" (optional)
-4. The system will automatically check for new listings every 5 minutes
+1. Configure your search filters or add search URLs to the pool
+2. ✅ Set your desired interval (30s to 1h)
+3. ✅ Click "Start Scraper" to begin automatic monitoring
+4. ✅ Enable "Auto-send new listings" for Telegram notifications (optional)
 5. New listings are instantly sent to your Telegram
 
 The web interface provides:
-- Real-time listing monitoring
-- **🔄 Auto-monitoring every 5 minutes** (new!)
-- **📲 Auto-send new listings to Telegram** (new!)
+- Real-time listing monitoring with progress visualization
+- **🔄 Configurable auto-monitoring intervals**
+- **🔁 URL pool management for multiple search queries**
+- **📲 Auto-send new listings to Telegram**
 - Advanced filtering options
 - Price analysis and trends
 - Visual data exploration
@@ -140,11 +146,23 @@ car_scraper/
 │   ├── main.py             # Main CLI application
 │   └── README.md           # CLI documentation
 ├── ui/                     # Web interface
-│   └── streamlit_app.py    # Streamlit web app
+│   ├── streamlit_app.py    # Streamlit web app
+│   ├── cache_management.py # Cache management components
+│   ├── telegram_controls.py # Telegram UI controls
+│   └── pages/              # Page components for the UI
+│       ├── scraper.py      # Main scraper page
+│       ├── home.py         # Home page
+│       └── data_storage.py # Data management page
 ├── scraper/                # Scraping engine
 │   └── engine.py           # Main scraping engine
-├── services/               # Business logic layer
-│   └── vroomsniffer_service.py
+├── services/               # Service layer (business logic)
+│   ├── vroomsniffer_service.py  # Main facade service
+│   ├── storage_service.py       # Data storage operations
+│   ├── url_pool_service.py      # URL management
+│   ├── statistics_service.py    # Analytics and statistics
+│   ├── notification_service.py  # Notification handling
+│   ├── scraper_service.py       # Scraper operations
+│   └── scheduler_service.py     # Scheduling and timing
 ├── storage/                # Data persistence
 │   ├── db.py              # Database operations
 │   ├── latest_results.json      # Latest scraping results
@@ -162,27 +180,25 @@ car_scraper/
 │   └── car_models.py
 ├── logger/                # Logging
 │   └── logging_config.py
-└── tests/                 # Test suite
-    ├── test_end_to_end.py
-    └── test_service_layer.py
+└── tests/                 # Test suite (future)
 ```
 
 ### Core Components
-- `cli/` → **Command-line interface** (organized in dedicated folder)
-  - `cli/main.py` → Main CLI application
-- `ui/` → **Web interface** (Streamlit app)
-- `scraper/` → **Scraping engine** (Playwright logic)
-- `services/` → **Business logic** (service layer)
-- `storage/` → **Centralized data storage** (JSON files, database connections)
-- `notifier/` → **Notifications** (Telegram messaging)
+- `cli/` → **Command-line interface** with both ad-hoc and scheduled scraping
+- `ui/` → **Web interface** with real-time monitoring and URL pool management
+- `scraper/` → **Scraping engine** using Playwright for JavaScript-heavy sites
+- `services/` → **Service layer** with specialized services for each concern
+- `storage/` → **Centralized data storage** using JSON files
+- `notifier/` → **Notifications** via Telegram
 
-### Supporting Components
-- `proxy/manager.py` → Proxy rotation
-- `utils/deduplication.py` → Detect repeated listings
-- `scheduler/job.py` → Time-based trigger
-- `config/` → Configuration settings
-- `tests/` → Test suite
-- `logger/` → Logging configuration
+### Service Layer Architecture
+- `vroomsniffer_service.py` → Main facade coordinating all services
+- `storage_service.py` → Handling data persistence and retrieval
+- `url_pool_service.py` → Managing search URLs and URL pools
+- `statistics_service.py` → Generating analytics and statistics
+- `notification_service.py` → Managing notification delivery
+- `scraper_service.py` → Coordinating scraping operations
+- `scheduler_service.py` → Managing timing and scheduling
 
 ---
 

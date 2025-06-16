@@ -47,6 +47,8 @@
 
 import argparse
 import sys
+import subprocess
+import json
 import time
 from pathlib import Path
 
@@ -54,36 +56,43 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
-# Import services instead of direct imports
-from services.storage_service import StorageService
-from services.notification_service import NotificationService
-from services.scraper_service import ScraperService
-from services.scheduler_service import SchedulerService
-from services.url_pool_service import UrlPoolService
-from services.statistics_service import StatisticsService
+from notifier.telegram import send_telegram_message, format_car_listing_message
 
-# Initialize service instances
-storage_service = StorageService()
-notification_service = NotificationService()
-scraper_service = ScraperService(storage_service)
-scheduler_service = SchedulerService()
-url_pool_service = UrlPoolService()
-statistics_service = StatisticsService(storage_service)
+# CLI-specific data paths - using centralized storage directory
+STORAGE_DIR = Path(__file__).parent.parent / "storage"
+LATEST_RESULTS_PATH = STORAGE_DIR / "latest_results.json"
+ALL_RESULTS_PATH = STORAGE_DIR / "all_old_results.json"
+NEW_RESULTS_PATH = STORAGE_DIR / "latest_new_results.json"
+
+# Create storage directory if it doesn't exist
+STORAGE_DIR.mkdir(exist_ok=True)
 
 def _check_listings_exist():
     """Helper function to check if listings exist and print error if not"""
-    listings = storage_service.get_all_cached_listings(storage_service.latest_results_path)
+    listings = load_json_data(LATEST_RESULTS_PATH)
     if not listings:
         print("[!] No listings found. Run 'python cli/main.py run <url>' first.")
         return False
     return True
+
+def load_json_data(path):
+    """Load data from JSON file"""
+    if Path(path).exists():
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+def save_json_data(data, path):
+    """Save data to JSON file"""
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
 def list_listings():
     """List the latest scraped listings from JSON file"""
     if not _check_listings_exist():
         return
     
-    listings = storage_service.get_all_cached_listings(storage_service.latest_results_path)
+    listings = load_json_data(LATEST_RESULTS_PATH)
     print(f"[*] Found {len(listings)} listings:")
     for i, listing in enumerate(listings[:10], 1):  # Show only first 10
         title = listing.get("Title", "Unknown")[:50]
@@ -96,14 +105,18 @@ def search_listings(keyword):
     if not _check_listings_exist():
         return
     
-    listings = storage_service.get_listings_by_search_criteria(
-        storage_service.latest_results_path,
-        search_term=keyword
-    )
+    listings = load_json_data(LATEST_RESULTS_PATH)
     
-    if listings:
-        print(f"[*] Found {len(listings)} matches for '{keyword}':")
-        for i, listing in enumerate(listings[:10], 1):  # Show only first 10 matches
+    keyword = keyword.lower()
+    matches = []
+    for i, listing in enumerate(listings, 1):
+        title = listing.get("Title", "").lower()
+        if keyword in title:
+            matches.append((i, listing))
+    
+    if matches:
+        print(f"[*] Found {len(matches)} matches for '{keyword}':")
+        for i, listing in matches[:10]:  # Show only first 10 matches
             title = listing.get("Title", "Unknown")[:50]
             price = listing.get("Price", "Unknown")
             print(f"[{i}] {title} | {price}")
@@ -115,10 +128,13 @@ def send_listing(listing_index):
     if not _check_listings_exist():
         return
     
-    listings = storage_service.get_all_cached_listings(storage_service.latest_results_path)
+    listings = load_json_data(LATEST_RESULTS_PATH)
     if 1 <= listing_index <= len(listings):
         listing = listings[listing_index - 1]
-        success = notification_service.send_listing(listing)
+        
+        # Use formatted message for better presentation
+        formatted_msg = format_car_listing_message(listing)
+        success = send_telegram_message(formatted_msg)
         
         if success:
             print(f"[+] Listing {listing_index} sent via Telegram")
@@ -132,15 +148,24 @@ def send_top_listings(count=5):
     if not _check_listings_exist():
         return
     
-    listings = storage_service.get_all_cached_listings(storage_service.latest_results_path)
+    listings = load_json_data(LATEST_RESULTS_PATH)
     
     actual_count = min(count, len(listings))
     print(f"[*] Sending top {actual_count} listings via Telegram...")
     
-    success_count = notification_service.send_multiple_listings(
-        listings[:actual_count],
-        delay_seconds=2
-    )
+    success_count = 0
+    for i, listing in enumerate(listings[:actual_count]):
+        formatted_msg = format_car_listing_message(listing)
+        success = send_telegram_message(formatted_msg)
+        
+        if success:
+            print(f"[+] Listing {i+1}/{actual_count} sent successfully")
+            success_count += 1
+        else:
+            print(f"[!] Failed to send listing {i+1}")
+          # Rate limiting - wait between messages
+        if i < actual_count - 1:
+            time.sleep(2)  # 2 second delay between messages
     
     print(f"[+] Bulk notification complete! {success_count}/{actual_count} messages sent successfully.")
 
@@ -149,58 +174,53 @@ def notify_new_findings(search_keyword=""):
     if not _check_listings_exist():
         return
     
-    listings = storage_service.get_all_cached_listings(storage_service.latest_results_path)
+    listings = load_json_data(LATEST_RESULTS_PATH)
     
     # Filter by keyword if provided
+    filtered_listings = listings
     if search_keyword:
-        filtered_listings = storage_service.get_listings_by_search_criteria(
-            storage_service.latest_results_path, 
-            search_term=search_keyword
-        )
+        filtered_listings = [
+            listing for listing in listings 
+            if search_keyword.lower() in listing.get("Title", "").lower()
+        ]
         if not filtered_listings:
             print(f"[!] No listings found matching '{search_keyword}'")
             return
+    
+    # Send summary message
+    if search_keyword:
+        summary_msg = f"🔍 <b>Search Results for '{search_keyword}'</b>\n\n"
     else:
-        filtered_listings = listings
+        summary_msg = f"🚗 <b>Latest Car Scraping Results</b>\n\n"
     
-    # Send summary notification
-    success = notification_service.send_summary_notification(
-        filtered_listings,
-        search_keyword=search_keyword,
-        max_preview=3
-    )
+    summary_msg += f"📊 Found {len(filtered_listings)} listings\n"
     
+    if filtered_listings:
+        # Add top 3 titles as preview
+        summary_msg += "\n<b>Top Listings:</b>\n"
+        for i, listing in enumerate(filtered_listings[:3]):
+            title = listing.get("Title", "Unknown")[:50] + "..." if len(listing.get("Title", "")) > 50 else listing.get("Title", "Unknown")
+            price = listing.get("Price", "Unknown")
+            summary_msg += f"{i+1}. {title} - {price}\n"
+    
+    summary_msg += f"\n💡 Use CLI to explore: 'python cli/main.py list'"
+    
+    success = send_telegram_message(summary_msg)
     if success:
         print(f"[+] Summary notification sent for {len(filtered_listings)} listings")
     else:
         print(f"[!] Failed to send summary notification")
 
-def run_scraper_with_url(url, notify=False, notify_count=5):
-    """Run the scraper with a direct URL"""
-    print(f"[*] Running scraper with URL: {url}")
+def copy_scraper_results():
+    """Copy results from the main scraper to CLI data directory"""
+    # Original scraper output paths
+    original_latest = project_root / "scraper" / "latest_results.json"
     
-    # Create filters dictionary with custom_url
-    filters = {"custom_url": url}
-    
-    # Use the scraper service to run the scraper
-    listings = scraper_service.run_scraper_and_load_results(
-        filters,
-        build_search_url_ui=lambda x: x.get("custom_url", ""),  # Simple lambda to return the URL
-        root_dir=project_root
-    )
-    
-    if listings:
-        print(f"[+] Scraping complete! Found {len(listings)} listings.")
-        
-        # Send notifications if requested
-        if notify and listings:
-            print(f"[*] Sending notifications for top {min(notify_count, len(listings))} listings...")
-            send_top_listings(notify_count)
-        
+    if original_latest.exists():
+        listings = load_json_data(str(original_latest))
+        save_json_data(listings, LATEST_RESULTS_PATH)
         return True
-    else:
-        print("[!] Scraping completed but no listings found.")
-        return False
+    return False
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -235,9 +255,7 @@ For more advanced features, use the Streamlit UI:
         "keyword", 
         type=str, 
         help="Keyword to search for in listing titles (e.g., 'bmw', 'automatic', 'diesel')"
-    )
-    
-    # Send command
+    )    # Send command
     send_parser = subparsers.add_parser(
         "send", 
         help="Send a listing via Telegram",
@@ -275,9 +293,7 @@ For more advanced features, use the Streamlit UI:
         nargs='?', 
         default="",
         help="Optional keyword to filter listings before notification"
-    )
-    
-    # Run command
+    )    # Run command
     run_parser = subparsers.add_parser(
         "run", 
         help="Run the scraper engine with a direct marketplace URL",
@@ -298,42 +314,11 @@ For more advanced features, use the Streamlit UI:
         type=int, 
         default=5,
         help="Number of top listings to notify via Telegram (default: 5)"
-    )
-    
-    # Version command
+    )    # Version command
     version_parser = subparsers.add_parser(
         "version", 
         help="Show version information",
         description="Display version and system information for the VroomSniffer car scraper."
-    )
-
-    # Scheduler commands
-    schedule_parser = subparsers.add_parser(
-        "schedule",
-        help="Schedule periodic scraping runs",
-        description="Set up automatic scraping at fixed intervals"
-    )
-    schedule_parser.add_argument(
-        "url",
-        type=str,
-        help="Direct marketplace search URL to scrape periodically"
-    )
-    schedule_parser.add_argument(
-        "--interval",
-        type=int,
-        default=60,
-        help="Interval between scraping runs in seconds (default: 60)"
-    )
-    schedule_parser.add_argument(
-        "--runs",
-        type=int,
-        default=5,
-        help="Maximum number of scraping runs to perform (default: 5)"
-    )
-    schedule_parser.add_argument(
-        "--notify",
-        action="store_true",
-        help="Send notifications for new listings found in each run"
     )
 
     args = parser.parse_args()
@@ -349,41 +334,24 @@ For more advanced features, use the Streamlit UI:
     elif args.command == "notify":
         notify_new_findings(args.keyword)
     elif args.command == "version":
-        print("🚗 VroomSniffer Car Scraper v2.1.0 (Service Layer Refactored)")
+        print("🚗 VroomSniffer Car Scraper v2.0.0 (Refactored)")
     elif args.command == "run":
-        run_scraper_with_url(args.url, args.notify, args.notify_count)
-    elif args.command == "schedule":
-        try:
-            # Set up scheduler
-            scheduler_service.set_interval(args.interval)
-            scheduler_service.start_scraping()
-            
-            print(f"[*] Starting scheduled scraping with interval: {args.interval} seconds")
-            print(f"[*] Will perform up to {args.runs} runs")
-            print(f"[*] Press Ctrl+C to stop early")
-            
-            runs_completed = 0
-            while runs_completed < args.runs and scheduler_service.is_scraping_active():
-                if scheduler_service.is_time_to_scrape():
-                    print(f"\n[*] Run {runs_completed + 1}/{args.runs}")
-                    success = run_scraper_with_url(args.url, args.notify, 3)
-                    
-                    runs_completed = scheduler_service.record_scrape()
-                    
-                    if runs_completed >= args.runs:
-                        scheduler_service.stop_scraping()
-                        break
-                        
-                    next_run_in = scheduler_service.get_time_until_next_scrape()
-                    print(f"[*] Next run in {int(next_run_in)} seconds")
-                
-                # Sleep for a short time to avoid CPU spinning
-                time.sleep(1)
-                
-            print(f"[+] Scheduled scraping complete. Performed {runs_completed} runs.")
-            
-        except KeyboardInterrupt:
-            print("\n[*] Scheduled scraping stopped by user")
-            scheduler_service.stop_scraping()
+        # Run the Playwright scraper engine with the given URL
+        scraper_path = project_root / "scraper" / "engine.py"
+        
+        # Prepare scraper arguments
+        scraper_args = [sys.executable, str(scraper_path), "--url", args.url]
+        if args.notify:
+            scraper_args.extend(["--notify", "--notify-count", str(args.notify_count)])
+        
+        result = subprocess.run(scraper_args)
+        if result.returncode == 0:
+            # Copy results to CLI data directory
+            if copy_scraper_results():
+                print(f"[+] Scraper run complete. Results saved to {LATEST_RESULTS_PATH}")
+            else:
+                print("[!] Scraper completed but no results file found.")
+        else:
+            print("[!] Scraper run failed.")
     else:
         parser.print_help()

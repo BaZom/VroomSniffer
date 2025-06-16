@@ -1,0 +1,133 @@
+"""
+ScraperService - Handles running the scraper and processing results.
+Responsible for executing the scraper and managing its results.
+"""
+import sys
+import json
+import subprocess
+from pathlib import Path
+
+class ScraperService:
+    """Service for scraper execution and results handling"""
+    
+    def __init__(self, storage_service=None):
+        """
+        Initialize with optional StorageService dependency
+        
+        Args:
+            storage_service: Optional StorageService instance
+        """
+        if storage_service:
+            self.storage_service = storage_service
+        else:
+            # Import here to avoid circular imports
+            from services.storage_service import StorageService
+            self.storage_service = StorageService()
+        
+        self.root_dir = Path(__file__).parent.parent
+    
+    def run_scraper_and_load_results(self, filters, build_search_url_ui, root_dir=None):
+        """
+        Run the marketplace scraper engine as a subprocess with the given filters
+        
+        Args:
+            filters: Dictionary containing search filters or custom_url
+            build_search_url_ui: Function to build search URL from filters
+            root_dir: Optional root directory path
+            
+        Returns:
+            list: Scraped listings
+        """
+        if root_dir:
+            self.root_dir = Path(root_dir)
+            
+        listings_data = []
+        try:
+            if filters and filters.get("custom_url"):
+                url = filters["custom_url"]
+                print(f"[DEBUG] Using custom URL: {url}")
+            else:
+                url = build_search_url_ui(filters)
+                print(f"[DEBUG] Generated URL from filters: {url}")
+                print(f"[DEBUG] Filters used: {filters}")
+            
+            args = [sys.executable, str(self.root_dir / "scraper" / "engine.py"), "--url", url]
+            result = subprocess.run(
+                args,
+                cwd=self.root_dir, capture_output=True, text=True
+            )
+            
+            if result.returncode == 0:
+                json_path = self.root_dir / "storage" / "latest_results.json"
+                if json_path.exists():
+                    with open(json_path, "r", encoding="utf-8") as f:
+                        listings_data = json.load(f)
+                        if not listings_data:
+                            print(f"[INFO] No listings found for search URL: {url}")
+                else:
+                    print(f"[WARNING] Scraper completed but no results file found")
+                    listings_data = []
+            else:
+                print(f"[WARNING] Scraper failed: {result.stderr}")
+                print(f"[WARNING] Search URL was: {url}")
+                # Don't raise error, return empty list to continue with cached data
+                listings_data = []
+        except Exception as e:
+            print(f"[WARNING] Scraping error: {str(e)}")
+            print(f"[WARNING] Search URL was: {url if 'url' in locals() else 'Unknown'}")
+            # Don't raise error, return empty list to continue with cached data
+            listings_data = []
+            
+        return listings_data
+    
+    def get_listings_for_filter(self, filters, build_search_url_ui, all_old_path=None, latest_new_path=None, root_dir=None):
+        """
+        Get all listings and new listings by running the scraper and comparing with cached listings
+        
+        Args:
+            filters: Dictionary containing search filters (or custom_url)
+            build_search_url_ui: Function to build search URL from filters
+            all_old_path: Optional override for all results path
+            latest_new_path: Optional override for new results path
+            root_dir: Optional root directory path
+            
+        Returns:
+            tuple: (all_listings, new_listings)
+        """
+        # Use provided paths or default from storage service
+        all_old_path = all_old_path or self.storage_service.all_old_path
+        latest_new_path = latest_new_path or self.storage_service.latest_new_path
+        
+        if root_dir:
+            self.root_dir = Path(root_dir)
+        
+        # Run scraper to get fresh listings
+        listings_data = self.run_scraper_and_load_results(filters, build_search_url_ui, self.root_dir)
+        
+        # Load existing cached listings (URL-based)
+        cached_listings = self.storage_service.load_cache(all_old_path)
+        
+        # Identify new listings by URL
+        new_listings = []
+        all_listings = []
+        
+        for listing in listings_data:
+            url = listing.get("URL")
+            if not url:
+                continue  # Skip listings without URL
+                
+            if url not in cached_listings:
+                # This is a new listing
+                new_listings.append(listing)
+                cached_listings[url] = listing
+            
+            all_listings.append(listing)
+        
+        # Save updated cache
+        self.storage_service.save_cache(cached_listings, all_old_path)
+        
+        # Save new listings for this run
+        new_listings_dict = {listing["URL"]: listing for listing in new_listings if listing.get("URL")}
+        self.storage_service.save_cache(new_listings_dict, latest_new_path)
+        
+        return all_listings, new_listings
