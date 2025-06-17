@@ -18,8 +18,7 @@ def _get_telegram_config():
     
     return {
         'bot_token': os.getenv("TELEGRAM_BOT_TOKEN"),
-        'chat_id': os.getenv("TELEGRAM_CHAT_ID"),
-        'test_mode': os.getenv("TELEGRAM_TEST_MODE", "false").lower() == "true"
+        'chat_id': os.getenv("TELEGRAM_CHAT_ID")
     }
 
 def send_telegram_message(text, parse_mode=None):
@@ -38,16 +37,9 @@ def send_telegram_message(text, parse_mode=None):
     config = _get_telegram_config()
     bot_token = config['bot_token']
     chat_id = config['chat_id']
-    test_mode = config['test_mode']
     
     if not bot_token or not chat_id:
         return False, "[!] TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not configured"
-    # Test mode - simulate sending without actually connecting
-    if test_mode:
-        print(f"[TEST MODE] Would send Telegram message to {chat_id}:")
-        print(f"[TEST MODE] Message: {text}")
-        print(f"[+] Telegram message sent successfully (test mode)")
-        return True, None
     
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     

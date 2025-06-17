@@ -12,7 +12,7 @@ Welcome to the VroomSniffer CLI Documentation. This document provides comprehens
    - [Running the Scraper](#running-the-scraper)
    - [Listing Results](#listing-results)
    - [Searching Results](#searching-results)
-   - [Sending Notifications](#sending-notifications)
+   - [Sending Individual Listing Notifications](#sending-individual-listing-notifications)
    - [Scheduling Scraper Jobs](#scheduling-scraper-jobs)
 6. [Storage Files](#storage-files)
 7. [Practical Examples](#practical-examples)
@@ -70,7 +70,6 @@ python cli/main.py search [KEYWORD]
 
 # Send notifications
 python cli/main.py send [INDEXES]
-python cli/main.py notify [KEYWORD]
 
 # Schedule scraping
 python cli/main.py schedule [URLS...] [--use-saved] [--random] [--interval N] [--runs N] [--notify-new]
@@ -139,11 +138,7 @@ Send specific listings via Telegram (by index number from the list command):
 python cli/main.py send 1 3 5
 ```
 
-Send a summary notification about all new listings:
 
-```bash
-python cli/main.py notify
-```
 
 #### Schedule Scraping Jobs
 
@@ -185,7 +180,7 @@ python cli/main.py run [URL1] [URL2] ... [--notify-new] [--notify-count COUNT]
 
 - `urls`: One or more marketplace search URLs to scrape
 - `--notify-new`: Send Telegram notifications for new listings found after scraping
-- `--notify-count`: Number of new listings to send detailed notifications for (default: 5)
+- `--notify-count`: Number of new listings to send notifications for (default: -1 for all new listings, or a positive number to limit)
 
 **Examples:**
 
@@ -197,7 +192,7 @@ python cli/main.py run "https://www.marketplace.com/s-autos/bmw/k0c216"
 python cli/main.py run "https://www.marketplace.com/s-autos/bmw/k0c216" "https://www.marketplace.com/s-autos/audi/k0c216"
 
 # Scrape and send notifications for new listings
-python cli/main.py run "https://www.marketplace.com/s-autos/bmw/k0c216" --notify-new --notify-count 3
+python cli/main.py run "https://www.marketplace.com/s-autos/bmw/k0c216" --notify-new --notify-count 3  # Limit to 3 notifications
 ```
 
 ### Listing Results
@@ -257,7 +252,7 @@ python cli/main.py search "automatic"
 python cli/main.py search "320d"
 ```
 
-### Sending Notifications
+### Sending Individual Listing Notifications
 
 The CLI provides two commands for sending notifications:
 
@@ -283,15 +278,7 @@ python cli/main.py send 3
 python cli/main.py send 1 5 7
 ```
 
-#### 2. Send summary notifications
-
-The `notify` command sends a summary notification about the latest findings.
-
-```bash
-python cli/main.py notify [KEYWORD]
-```
-
-**Options:**
+#### 2. [Reserved for future use]
 
 - `keyword`: Optional search keyword to filter listings before sending
 
@@ -321,7 +308,7 @@ python cli/main.py schedule [URLs ...] [--use-saved] [--random] [--interval SECO
 - `--interval`: Interval between scraping runs in seconds (default: 60, minimum: 30)
 - `--runs`: Maximum number of scraping runs to perform (default: 5, use 0 for unlimited)
 - `--notify-new`: Send notifications for new listings found in each run
-- `--notify-count`: Number of new listings to send detailed notifications for (default: 5)
+- `--notify-count`: Number of new listings to send notifications for (default: -1 for all new listings, or a positive number to limit)
 
 **Examples:**
 
@@ -451,15 +438,38 @@ This section provides technical information about the CLI architecture and exten
 
 ### Architecture Overview
 
-The VroomSniffer CLI is built on a service-based architecture with the following key components:
+The VroomSniffer CLI is built on a modular, service-based architecture with the following key components:
 
-- **CLI Interface** (`cli/main.py`): Command-line interface and argument parsing
-- **Service Layer**:
-  - `ScraperService`: Handles the scraping operations
-  - `StorageService`: Manages data persistence and retrieval
-  - `NotificationService`: Handles notifications via Telegram
-  - `SchedulerService`: Manages timing and scheduling of operations
-- **Core Engines**:
+#### Module Organization
+
+The CLI is organized into several modules:
+
+1. **main.py**: Entry point for the CLI
+   - Orchestrates the flow between command-line arguments and command implementation
+   - Provides the `main()` function as the primary entrypoint
+   
+2. **commands.py**: Implementation of all command functions
+   - Contains the actual implementation of each command
+   - Functions are pure and accept services as dependencies
+   - Implements command logic with consistent error handling
+   
+3. **argparse_setup.py**: Command-line argument parsing
+   - Centralizes all argument parsing logic
+   - Configures and returns an `ArgumentParser` instance 
+   
+4. **utils.py**: Utility functions and services
+   - Provides the `Services` class to encapsulate all service instances
+   - Contains helper functions used across commands
+   - Includes decorators for common patterns (like progress bars)
+
+#### Service Layer
+
+- **ScraperService**: Handles the scraping operations
+- **StorageService**: Manages data persistence and retrieval
+- **NotificationService**: Handles notifications via Telegram
+- **SchedulerService**: Manages timing and scheduling of operations
+
+#### Core Engines:
   - `scraper/engine.py`: The scraping engine that extracts data
   - `proxy/manager.py`: Manages proxy connections (if used)
 
@@ -487,25 +497,35 @@ Each command has its own argument parser and handler function.
 
 To add a new command to the CLI:
 
-1. Add a new parser to the subparsers collection:
+1. Add the command implementation in `commands.py`:
+   ```python
+   def handle_new_command(services: Services, arg1: str, arg2: int = 0) -> None:
+       """
+       New command implementation
+       
+       Args:
+           services: Services instance
+           arg1: First argument
+           arg2: Second argument (optional)
+       """
+       # Implementation
+   ```
+
+2. Add a new parser in `argparse_setup.py`:
    ```python
    new_command_parser = subparsers.add_parser(
        "newcommand", 
        help="Description of new command"
    )
    # Add arguments to new_command_parser
+   new_command_parser.add_argument("arg1", type=str, help="First argument")
+   new_command_parser.add_argument("--arg2", type=int, default=0, help="Second argument")
    ```
 
-2. Create a handler function:
-   ```python
-   def handle_new_command(args):
-       # Implementation
-   ```
-
-3. Add the command to the main execution block:
+3. Add the command to the main execution block in `main.py`:
    ```python
    elif args.command == "newcommand":
-       handle_new_command(args)
+       handle_new_command(services, args.arg1, args.arg2)
    ```
 
 #### Extending Notification Options
@@ -575,3 +595,15 @@ python cli/main.py --help
 python cli/main.py run --help
 python cli/main.py schedule --help
 ```
+
+#### Type System and Error Handling
+
+The CLI uses Python type hints throughout the codebase:
+- Improved code documentation
+- Better IDE support
+- Runtime type checking (with optional tools)
+
+Error handling follows a consistent pattern:
+- Standard error messaging format
+- Error propagation through return values
+- Clear user feedback

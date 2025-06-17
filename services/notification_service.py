@@ -40,26 +40,44 @@ class NotificationService:
         success_count = 0
         failed = []
         
-        for i, listing in enumerate(listings):
-            formatted_msg = self.format_car_listing_message(listing)
-            success, error = self.send_telegram_message(formatted_msg, parse_mode=parse_mode)
+        # Process listings in batches to avoid rate limiting issues
+        batch_size = 15  # Process 15 at a time
+        delay_between_msgs = 3  # 3 seconds between messages
+        longer_delay_between_batches = 10  # 10 seconds between batches
+        
+        total_listings = len(listings)
+        
+        for batch_start in range(0, total_listings, batch_size):
+            batch_end = min(batch_start + batch_size, total_listings)
+            batch = listings[batch_start:batch_end]
             
-            # Retry once if network error
-            if not success and error and ("ConnectionResetError" in error or "Connection aborted" in error) and retry_on_network_error:
-                time.sleep(2)
+            # Process this batch
+            for i, listing in enumerate(batch):
+                formatted_msg = self.format_car_listing_message(listing)
                 success, error = self.send_telegram_message(formatted_msg, parse_mode=parse_mode)
+                
+                # Retry once if network error
+                if not success and error and ("ConnectionResetError" in error or "Connection aborted" in error) and retry_on_network_error:
+                    time.sleep(2)
+                    success, error = self.send_telegram_message(formatted_msg, parse_mode=parse_mode)
+                
+                if success:
+                    success_count += 1
+                else:
+                    failed.append({
+                        'index': batch_start + i + 1,
+                        'title': listing.get('Title', 'Unknown'),
+                        'error': error
+                    })
+                
+                # Add delay between messages (except for the last one in the batch)
+                if i < len(batch) - 1:
+                    time.sleep(delay_between_msgs)
             
-            if success:
-                success_count += 1
-            else:
-                failed.append({
-                    'index': i+1,
-                    'title': listing.get('Title', 'Unknown'),
-                    'error': error
-                })
-            
-            if i < len(listings) - 1:
-                time.sleep(1.5)  # Rate limiting
+            # Add a longer pause between batches (except after the last batch)
+            if batch_end < total_listings:
+                print(f"[*] Processed {batch_end}/{total_listings} listings. Pausing to avoid rate limits...")
+                time.sleep(longer_delay_between_batches)
         
         return success_count, failed
     
@@ -107,7 +125,7 @@ class NotificationService:
         Args:
             listings: List of dictionaries with listing information
             search_keyword: Optional search keyword used to filter the listings
-            max_preview: Maximum number of listings to show in the preview
+            max_preview: Maximum number of listings to show in the preview (not used)
             
         Returns:
             bool: True if sent successfully, False otherwise
@@ -119,16 +137,6 @@ class NotificationService:
             summary_msg = f"🚗 <b>Latest Car Scraping Results</b>\n\n"
         
         summary_msg += f"📊 Found {len(listings)} listings\n"
-        
-        if listings:
-            # Add top listings as preview
-            summary_msg += "\n<b>Top Listings:</b>\n"
-            for i, listing in enumerate(listings[:max_preview]):
-                title = listing.get("Title", "Unknown")
-                if len(title) > 50:
-                    title = title[:50] + "..."
-                price = listing.get("Price", "Unknown")
-                summary_msg += f"{i+1}. {title} - {price}\n"
         
         summary_msg += f"\n💡 Use CLI to explore: 'python cli/main.py list'"
         
