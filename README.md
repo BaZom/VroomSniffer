@@ -137,15 +137,15 @@ VroomSniffer follows a service-oriented architecture with specialized services f
 
 ```
 ┌─────────────────────────────────┐       ┌─────────────────────┐
-│            UI Layer             │       │      CLI Layer       │
-│  (Streamlit Web Application)    │       │  (Command Line Tool) │
+│            UI Layer             │       │      CLI Layer      │
+│  (Streamlit Web Application)    │       │  (Command Line Tool)│
 └───────────────┬─────────────────┘       └──────────┬──────────┘
                 │                                     │
                 ▼                                     ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Services Provider                           │
-│       (Centralized Service Factory and Dependency Manager)       │
-└─────────────────────────────┬─────────────────────────────────┘
+│                      Services Provider                          │
+│       (Centralized Service Factory and Dependency Manager)      │
+└─────────────────────────────┬─────────────────────────────────--┘
                              │
          ┌──────────────────┬┴───────────────┬─────────────────┐
          │                  │                │                 │
@@ -157,7 +157,7 @@ VroomSniffer follows a service-oriented architecture with specialized services f
          ▼                    ▼                  ▼                 ▼
 ┌─────────────────┐  ┌────────────────┐  ┌──────────────┐  ┌──────────────┐
 │  JSON Storage   │  │Playwright      │  │Telegram Bot  │  │Analytics     │
-│  (Data Files)   │  │(Scraper Engine)│  │(Notifications)│  │(Reporting)   │
+│  (Data Files)   │  │(Scraper Engine)│  │(Notifications│  │(Reporting)   │
 └─────────────────┘  └────────────────┘  └──────────────┘  └──────────────┘
 ```
 
