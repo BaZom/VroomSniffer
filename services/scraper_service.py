@@ -6,6 +6,7 @@ import sys
 import json
 import subprocess
 from pathlib import Path
+from services.storage_service import StorageService
 
 class ScraperService:
     """Service for scraper execution and results handling"""
@@ -20,8 +21,6 @@ class ScraperService:
         if storage_service:
             self.storage_service = storage_service
         else:
-            # Import here to avoid circular imports
-            from services.storage_service import StorageService
             self.storage_service = StorageService()
         
         self.root_dir = Path(__file__).parent.parent

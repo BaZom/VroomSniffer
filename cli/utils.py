@@ -9,6 +9,7 @@ from pathlib import Path
 import sys
 import time
 from functools import wraps
+from tqdm import tqdm
 
 # Add the parent directory to the path so we can import from project modules
 project_root = Path(__file__).parent.parent
@@ -129,9 +130,8 @@ def with_tqdm(func: Callable) -> Callable:
     @wraps(func)
     def wrapper(*args, **kwargs):
         try:
-            from tqdm import tqdm
             kwargs['tqdm_module'] = tqdm
-        except ImportError:
+        except NameError:
             kwargs['tqdm_module'] = None
             print("[!] tqdm package not found. Install it for progress bars: pip install tqdm")
         return func(*args, **kwargs)

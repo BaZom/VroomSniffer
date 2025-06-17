@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Any, Union, Tuple
 import json
 import sys
 import time
+import random
 from pathlib import Path
 
 from .utils import Services, check_listings_exist, with_tqdm, project_root
@@ -527,7 +528,6 @@ def run_scheduler(
         print(f"[*] Press Ctrl+C to stop early")
         
         runs_completed = 0
-        import random
         # Initialize the random seed with current time for better randomness
         random.seed()
         

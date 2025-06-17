@@ -3,6 +3,7 @@ NotificationService - Handles sending notifications about listings.
 Responsible for sending listings via Telegram and managing notification formats.
 """
 import time
+from notifier.telegram import send_telegram_message, format_car_listing_message
 
 class NotificationService:
     """Service for sending notifications about listings"""
@@ -15,13 +16,11 @@ class NotificationService:
             telegram_send: Function to send Telegram message
             telegram_format: Function to format car listing message
         """
-        # Import here to avoid circular imports
         if telegram_send and telegram_format:
             self.send_telegram_message = telegram_send
             self.format_car_listing_message = telegram_format
         else:
             # Default to standard Telegram functions
-            from notifier.telegram import send_telegram_message, format_car_listing_message
             self.send_telegram_message = send_telegram_message
             self.format_car_listing_message = format_car_listing_message
     

@@ -3,6 +3,7 @@ SchedulerService - Handles scheduling of scraping jobs.
 Responsible for managing intervals, scheduling, and timing of scraping operations.
 """
 import time
+import random
 from pathlib import Path
 
 class SchedulerService:
@@ -142,8 +143,6 @@ class SchedulerService:
         Returns:
             int: The selected URL index
         """
-        import random
-        
         if url_count <= 0:
             self.next_url_index = 0
         elif url_count == 1:

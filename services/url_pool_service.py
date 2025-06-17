@@ -4,6 +4,7 @@ Responsible for saving, loading, adding and removing URLs from storage.
 """
 import json
 import time
+import random
 from pathlib import Path
 
 class UrlPoolService:
@@ -139,7 +140,6 @@ class UrlPoolService:
             return ""
         
         if random_selection:
-            import random
             random.seed()  # Re-seed for true randomness
             return random.choice(urls)
         
@@ -165,7 +165,6 @@ class UrlPoolService:
             return []
             
         if random_selection:
-            import random
             random.seed()  # Re-seed for true randomness
             # Sample with replacement if batch size is larger than available URLs
             if batch_size >= len(urls):
