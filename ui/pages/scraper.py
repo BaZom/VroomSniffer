@@ -34,10 +34,10 @@ url_pool_service = get_url_pool_service()
 scheduler_service = get_scheduler_service()
 
 def _show_system_status():
-    """Display system status with clean metrics layout matching home page."""
-    st.subheader("📊 System Status")
+    """Display simplified system status."""
+    st.subheader("System Status")
     
-    # Get actual data
+    # Get minimal data
     try:
         import os
         
@@ -45,15 +45,12 @@ def _show_system_status():
         all_old_path = st.session_state.get('all_old_path')
         latest_new_path = st.session_state.get('latest_new_path')
         
-        # Storage service already initialized at module level
         total_listings = 0
         recent_additions = 0
-        cache_size_mb = 0
         
         if all_old_path and os.path.exists(all_old_path):
             stats = storage_service.get_cache_stats(all_old_path)
             total_listings = stats.get('total_listings', 0)
-            cache_size_mb = stats.get('cache_size_mb', 0)
         
         if latest_new_path and os.path.exists(latest_new_path):
             recent_data = storage_service.load_cache(latest_new_path)
@@ -62,25 +59,19 @@ def _show_system_status():
     except Exception:
         total_listings = 0
         recent_additions = 0
-        cache_size_mb = 0
 
-    # Use metrics component
-    metrics_data = [
-        {'label': 'Total Listings', 'value': total_listings},
-        {'label': 'Recent Additions', 'value': recent_additions},
-        {'label': 'Cache Size', 'value': f"{cache_size_mb} MB" if cache_size_mb > 0 else "< 0.01 MB"},
-        {'label': 'Total Runs', 'value': scheduler_service.get_total_runs()}
-    ]
-    
-    display_metrics_row(metrics_data, 4)
-    
-    # Status message
-    status_text = "🟢 ACTIVE" if scheduler_service.is_scraping_active() else "🔴 STOPPED"
-    scraper_info = f"Scraper: {status_text} | URLs: {len(st.session_state.url_pool)} | Runs: {scheduler_service.get_total_runs()}"
-    if scheduler_service.is_scraping_active():
-        st.info(f"🚀 {scraper_info}")
-    else:
-        st.warning(f"⏸️ {scraper_info}")
+    # Simplified metrics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Listings", total_listings)
+    with col2:
+        st.metric("Recent New", recent_additions)
+    with col3:
+        st.metric("Runs", scheduler_service.get_total_runs())
+        
+    # Simple status message
+    status = "Active" if scheduler_service.is_scraping_active() else "Stopped"
+    st.caption(f"Status: {status} | URLs: {len(st.session_state.url_pool)}")
 
 def show_scraper_page(all_old_path, latest_new_path, root_dir):
     """Multi-URL scraper with clean interface."""
@@ -148,71 +139,130 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
             
             current_url = st.session_state.url_pool[current_url_index]
             
-            with st.spinner(f"🔍 Scraping URL #{current_url_index + 1}..."):
-                try:
-                    filters = {"custom_url": current_url}
+            # Create status containers for progress updates
+            scrape_status = st.empty()
+            scrape_progress_bar = st.empty()
+            message_status = st.empty()
+            result_status = st.empty()
+            
+            # Get URL description if available
+            url_description = ""
+            url_data = url_pool_service.get_url_data()
+            if current_url in url_data:
+                url_description = url_data[current_url].get('description', '')
+                
+            # Scraping phase
+            scrape_header = f"URL #{current_url_index + 1} of {len(st.session_state.url_pool)}: {current_url[:50]}..."
+            if url_description:
+                scrape_header = f"{url_description} - {scrape_header}"
+                
+            scrape_status.info(f"🔍 Scraping {scrape_header}")
+            scrape_progress_bar.progress(0, text="Starting scraper engine...")
+            filters = {"custom_url": current_url}
+            
+            try:
+                # Update progress to show initialization
+                scrape_progress_bar.progress(0.2, text="🔄 Initializing scraper...")
+                # Define progress callback
+                def scraper_progress_callback(step, message, progress_value):
+                    scrape_progress_bar.progress(progress_value, text=f"🔍 {message}")
+                
+                # Use our ScraperService instance from the module level
+                results = scraper_service.get_listings_for_filter(
+                    filters,
+                    url_pool_service.build_search_url_from_custom,
+                    all_old_path, 
+                    latest_new_path,
+                    root_dir,
+                    progress_callback=scraper_progress_callback
+                )
+                
+                all_listings, new_listings = results
+                
+                # Simplified status updates
+                if all_listings:
+                    source_info = f"URL #{current_url_index + 1}"
+                    if url_description:
+                        source_info = f"{url_description}"
                     
-                    # Use our ScraperService instance from the module level
-                    results = scraper_service.get_listings_for_filter(
-                        filters,
-                        url_pool_service.build_search_url_from_custom,
-                        all_old_path, 
-                        latest_new_path,
-                        root_dir
+                    scrape_status.success(f"Found {len(all_listings)} listings ({len(new_listings)} new)")
+                    scrape_progress_bar.progress(1.0)
+                else:
+                    scrape_status.warning(f"No listings found")
+                    scrape_progress_bar.progress(1.0)
+                
+                # Play sound when new listings are found
+                if new_listings:
+                    play_sound("Sniff1.wav")
+                
+                st.session_state.latest_results = {
+                    'all_listings': all_listings,
+                    'new_listings': new_listings,
+                    'timestamp': current_time,
+                    'url': current_url,
+                    'url_index': current_url_index,
+                    'url_description': url_description
+                }
+                
+                # Auto-send if enabled (simplified)
+                if st.session_state.auto_send_active and new_listings:
+                    # Update status
+                    message_status.info(f"Sending {len(new_listings)} notifications...")
+                    
+                    # Add source URL information for notifications
+                    for listing in new_listings:
+                        if 'source_url' not in listing:
+                            listing['source_url'] = current_url
+                            
+                    # Create message progress bar
+                    message_progress = st.empty()
+                    
+                    # Send notifications
+                    success_count = send_listings_to_telegram(
+                        notification_service, 
+                        new_listings, 
+                        progress_container=message_progress,
+                        source_description=url_description
                     )
                     
-                    all_listings, new_listings = results
-                    
-                    # Play sound immediately when new listings are found
-                    if new_listings:
-                        play_sound("Sniff1.wav")
-                    
-                    st.session_state.latest_results = {
-                        'all_listings': all_listings,
-                        'new_listings': new_listings,
-                        'timestamp': current_time,
-                        'url': current_url,
-                        'url_index': current_url_index
-                    }
-                    
-                    # Auto-send if enabled
-                    if st.session_state.auto_send_active and new_listings:
-                        send_listings_to_telegram(notification_service, new_listings)
-                    
-                    # Update counters using scheduler service
-                    total_runs = scheduler_service.record_scrape()
-                    st.session_state.total_runs = total_runs  # Keep UI in sync
-                      # Pre-select next URL using scheduler service with user's selection mode
-                    random_selection = st.session_state.get('random_url_selection', True)
-                    scheduler_service.select_next_url_index(
-                        url_count=len(st.session_state.url_pool),
-                        random_selection=random_selection,
-                        current_run=total_runs
-                    )
-                    
-                    # Show results
-                    if new_listings:
-                        st.success(f"✅ Found {len(new_listings)} new listings!")
+                    if success_count > 0:
+                        message_status.success(f"Sent {success_count} notifications")
                     else:
-                        st.info("🔍 No new listings found")
-                    
-                except Exception as e:
-                    st.error(f"❌ Scraping failed: {str(e)}")
-                    st.session_state.last_scrape_time = current_time
+                        message_status.error(f"Failed to send")
+                        
+                # Simple results display
+                if all_listings:
+                    with result_status.container():
+                        # Add collapsible section for listings
+                        with st.expander("See results"):
+                            display_scrape_results({
+                                'all_listings': all_listings,
+                                'new_listings': new_listings
+                            })
+                
+                # Update counters using scheduler service
+                total_runs = scheduler_service.record_scrape()
+                st.session_state.total_runs = total_runs  # Keep UI in sync
+                
+                # Pre-select next URL using scheduler service with user's selection mode
+                random_selection = st.session_state.get('random_url_selection', True)
+                scheduler_service.select_next_url_index(
+                    url_count=len(st.session_state.url_pool),
+                    random_selection=random_selection,
+                    current_run=total_runs
+                )
+                
+            except Exception as e:
+                scrape_status.error(f"❌ Scraping failed: {str(e)}")
+                st.session_state.last_scrape_time = current_time
 
-    # Show Results Section
-    if st.session_state.latest_results:
-        st.divider()
-        
-    # Display Results
-    display_scrape_results(st.session_state.latest_results)
-      
-    # Progress Display using component
-    display_scraper_progress(scheduler_service)
-        
-    # Auto-refresh if scraping is active
+    # Display active scraper status and timer
     if scheduler_service.is_scraping_active():
-        time.sleep(2)
+        # Create a dedicated container for the timer progress
+        timer_container = st.container()
+        with timer_container:
+            display_scraper_progress(scheduler_service)
+        
+        # Auto-refresh if scraping is active
+        time.sleep(1)  # Reduced refresh time for more responsive UI
         st.rerun()
-    else:
-        st.empty()

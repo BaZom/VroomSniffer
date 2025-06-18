@@ -24,7 +24,7 @@ class NotificationService:
             self.send_telegram_message = send_telegram_message
             self.format_car_listing_message = format_car_listing_message
     
-    def manual_send_listings(self, listings, parse_mode="HTML", retry_on_network_error=True):
+    def manual_send_listings(self, listings, parse_mode="HTML", retry_on_network_error=True, source_url=None, progress_callback=None):
         """
         Send listings to Telegram, retrying once on network error
         
@@ -32,6 +32,9 @@ class NotificationService:
             listings: List of listing dictionaries to send
             parse_mode: Telegram parse mode (default "HTML")
             retry_on_network_error: Whether to retry on network errors
+            source_url: Optional URL that was used for scraping
+            progress_callback: Optional callback function to report progress
+                             function(sent_count, total_count, batch_num=None)
             
         Returns:
             tuple: (success_count, failed_list)
@@ -52,6 +55,10 @@ class NotificationService:
             
             # Process this batch
             for i, listing in enumerate(batch):
+                # Add source URL to listing if provided and not already present
+                if source_url and not listing.get("source_url"):
+                    listing["source_url"] = source_url
+                    
                 formatted_msg = self.format_car_listing_message(listing)
                 success, error = self.send_telegram_message(formatted_msg, parse_mode=parse_mode)
                 
@@ -80,16 +87,21 @@ class NotificationService:
         
         return success_count, failed
     
-    def send_listing(self, listing):
+    def send_listing(self, listing, source_url=None):
         """
         Send a single listing via Telegram
         
         Args:
             listing: Dictionary with listing information
+            source_url: Optional URL that was used for scraping
             
         Returns:
             bool: True if sent successfully, False otherwise
         """
+        # Add source URL to listing if provided
+        if source_url and not listing.get("source_url"):
+            listing["source_url"] = source_url
+            
         formatted_msg = self.format_car_listing_message(listing)
         success, _ = self.send_telegram_message(formatted_msg)
         return success

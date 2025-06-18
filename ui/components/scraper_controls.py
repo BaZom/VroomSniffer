@@ -6,7 +6,7 @@ from ui.components.sound_effects import play_sound
 
 def display_scraper_controls(scheduler_service):
     """
-    Display and handle scraper control interface.
+    Display simplified scraper control interface.
     
     Args:
         scheduler_service: Instance of SchedulerService
@@ -14,9 +14,9 @@ def display_scraper_controls(scheduler_service):
     Returns:
         True if any setting was changed, False otherwise
     """
-    st.subheader("⚙️ Controls")
+    st.subheader("Controls")
     
-    # Adjacent buttons for Start/Stop and Auto-send toggle
+    # Simplified controls layout
     col1, col2, col3 = st.columns([1.5, 2, 1.5])
     changed = False
     
@@ -25,7 +25,7 @@ def display_scraper_controls(scheduler_service):
             if st.button("▶️ Start", type="primary", use_container_width=True):
                 if st.session_state.url_pool:
                     scheduler_service.start_scraping()
-                      # Pre-select first URL using scheduler service with user's selection mode
+                    # Pre-select first URL using scheduler service
                     random_selection = st.session_state.get('random_url_selection', True)
                     scheduler_service.select_next_url_index(
                         url_count=len(st.session_state.url_pool),
@@ -33,15 +33,15 @@ def display_scraper_controls(scheduler_service):
                         current_run=scheduler_service.get_total_runs()
                     )
                     
-                    st.success("🚀 Started!")
-                    play_sound("Vroom 1.mp3")  # Play start sound effect
+                    st.success("Started")
+                    play_sound("Vroom 1.mp3")
                     changed = True
                 else:
                     st.error("Add URLs first")
         else:
             if st.button("⏹️ Stop", use_container_width=True):
                 scheduler_service.stop_scraping()
-                st.success("⏹️ Stopped!")
+                st.success("Stopped")
                 changed = True
     
     with col2:        # Store previous state to detect changes
@@ -90,18 +90,29 @@ def display_scraper_controls(scheduler_service):
 
 def display_scraper_progress(scheduler_service):
     """
-    Display scraper progress information.
+    Display simplified scraper progress information.
     
     Args:
         scheduler_service: Instance of SchedulerService
     """
-    if scheduler_service.is_scraping_active():
+    if not scheduler_service.is_scraping_active():
+        return
+        
+    # Create a unique key for this container to avoid duplication
+    with st.container():
+        # Use a simpler separator
+        st.divider()
+        
+        # Show minimal status information
+        total_runs = scheduler_service.get_total_runs()
         time_until_next = scheduler_service.get_time_until_next_scrape()
         progress = scheduler_service.get_progress_percentage()
         
-        if time_until_next > 0:
-            progress_container = st.empty()
-            progress_container.progress(progress, text=f"⏰ Next scrape in {int(time_until_next)} seconds")
-        else:
-            ready_container = st.empty()
-            ready_container.progress(1.0, text="🔍 Ready to scrape...")
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            if time_until_next > 0:
+                st.progress(progress, text=f"Next: {int(time_until_next)}s")
+            else:
+                st.progress(1.0, text="Ready to scrape")
+        with col2:
+            st.metric("Total runs", total_runs)

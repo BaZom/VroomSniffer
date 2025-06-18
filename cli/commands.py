@@ -478,10 +478,16 @@ def notify_new_listings_after_scrape(
         print("[*] Large number of notifications - using batch processing to avoid Telegram rate limits")
     
     # Use the notification service to send individual listings
+    # Get the URL description if available
+    source_url = None
+    if len(new_listings) > 0 and "source_url" in new_listings[0]:
+        source_url = new_listings[0].get("source_url")
+        
     success_count, failed = services.notification_service.manual_send_listings(
         listings_to_send,
         parse_mode="HTML",
-        retry_on_network_error=True
+        retry_on_network_error=True,
+        source_url=source_url
     )
     
     print(f"[+] Sent {success_count}/{len(listings_to_send)} detailed notifications successfully.")

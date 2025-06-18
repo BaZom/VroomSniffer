@@ -11,17 +11,25 @@ from services.storage_service import StorageService
 class ScraperService:
     """Service for scraper execution and results handling"""
     
-    def __init__(self, storage_service=None):
+    def __init__(self, storage_service=None, url_pool_service=None):
         """
-        Initialize with optional StorageService dependency
+        Initialize with optional service dependencies
         
         Args:
             storage_service: Optional StorageService instance
+            url_pool_service: Optional UrlPoolService instance
         """
         if storage_service:
             self.storage_service = storage_service
         else:
             self.storage_service = StorageService()
+            
+        if url_pool_service:
+            self.url_pool_service = url_pool_service
+        else:
+            # Import here to avoid circular imports
+            from services.url_pool_service import UrlPoolService
+            self.url_pool_service = UrlPoolService()
         
         self.root_dir = Path(__file__).parent.parent
     
@@ -79,7 +87,7 @@ class ScraperService:
             
         return listings_data
     
-    def get_listings_for_filter(self, filters, build_search_url_ui, all_old_path=None, latest_new_path=None, root_dir=None):
+    def get_listings_for_filter(self, filters, build_search_url_ui, all_old_path=None, latest_new_path=None, root_dir=None, progress_callback=None):
         """
         Get all listings and new listings by running the scraper and comparing with cached listings
         
@@ -89,6 +97,8 @@ class ScraperService:
             all_old_path: Optional override for all results path
             latest_new_path: Optional override for new results path
             root_dir: Optional root directory path
+            progress_callback: Optional callback function for progress updates
+                               callback(step, message, progress_value)
             
         Returns:
             tuple: (all_listings, new_listings)
@@ -100,8 +110,27 @@ class ScraperService:
         if root_dir:
             self.root_dir = Path(root_dir)
         
+        # Get the scraper URL
+        scraper_url = ""
+        if filters and filters.get("custom_url"):
+            scraper_url = filters["custom_url"]
+        else:
+            scraper_url = build_search_url_ui(filters)
+        
+        # Update progress if callback provided
+        if progress_callback:
+            progress_callback("init", "Initializing scraper...", 0.3)
+            
         # Run scraper to get fresh listings
         listings_data = self.run_scraper_and_load_results(filters, build_search_url_ui, self.root_dir)
+        
+        # Update progress if callback provided
+        if progress_callback:
+            progress_callback("scrape", "Data retrieved from source", 0.6)
+        
+        # Add source URL to each listing
+        for listing in listings_data:
+            listing["source_url"] = scraper_url
         
         # Load existing cached listings (URL-based)
         cached_listings = self.storage_service.load_cache(all_old_path)
@@ -121,6 +150,28 @@ class ScraperService:
                 cached_listings[url] = listing
             
             all_listings.append(listing)
+            
+        # Update URL statistics if scraper URL is in our URL pool
+        # Only count NEW listings, not all scraped listings
+        if scraper_url:
+            run_successful = len(listings_data) > 0
+            self.url_pool_service.update_url_stats(
+                scraper_url,
+                run_successful=run_successful,
+                listings_count=len(new_listings)  # Count only NEW listings
+            )
+        
+        for listing in listings_data:
+            url = listing.get("URL")
+            if not url:
+                continue  # Skip listings without URL
+                
+            if url not in cached_listings:
+                # This is a new listing
+                new_listings.append(listing)
+                cached_listings[url] = listing
+            
+            all_listings.append(listing)
         
         # Save updated cache
         self.storage_service.save_cache(cached_listings, all_old_path)
@@ -128,5 +179,9 @@ class ScraperService:
         # Save new listings for this run
         new_listings_dict = {listing["URL"]: listing for listing in new_listings if listing.get("URL")}
         self.storage_service.save_cache(new_listings_dict, latest_new_path)
+        
+        # Final progress update if callback provided
+        if progress_callback:
+            progress_callback("complete", f"Found {len(all_listings)} listings ({len(new_listings)} new)", 1.0)
         
         return all_listings, new_listings

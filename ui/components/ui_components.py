@@ -3,19 +3,31 @@ Reusable UI components for the VroomSniffer UI.
 """
 import streamlit as st
 
-def display_url_list(urls, next_url_index=None, is_scraping_active=False, is_next_url_selected=False):
+def display_url_list(urls, url_pool_service=None, next_url_index=None, is_scraping_active=False, is_next_url_selected=False):
     """
-    Display a list of URLs with highlighting for the next URL.
+    Display a list of URLs with highlighting for the next URL and metadata.
     
     Args:
         urls: List of URLs to display
+        url_pool_service: UrlPoolService instance to get URL metadata
         next_url_index: Index of next URL to be processed (optional)
         is_scraping_active: Whether scraping is currently active
         is_next_url_selected: Whether next URL has been selected
+        
+    Returns:
+        tuple: (modified, removed_url_index) - whether URL pool was modified and index of removed URL
     """
     if not urls:
         st.info("No URLs in pool. Add URLs to start scraping.")
-        return
+        return False, None
+    
+    # Get URL metadata if service is provided
+    url_data = {}
+    if url_pool_service:
+        url_data = url_pool_service.get_url_data()
+    
+    modified = False
+    removed_index = None
         
     for i, url in enumerate(urls):
         # Determine if this URL should be highlighted
@@ -26,12 +38,79 @@ def display_url_list(urls, next_url_index=None, is_scraping_active=False, is_nex
         # Truncate long URLs for display
         display_url = url if len(url) <= 60 else f"{url[:60]}..."
         
+        # Get metadata if available
+        description = ""
+        run_count = 0
+        total_listings = 0
+        last_run = ""
+        
+        if url in url_data:
+            description = url_data[url].get('description', '')
+            stats = url_data[url].get('stats', {})
+            run_count = stats.get('run_count', 0)
+            total_listings = stats.get('total_listings', 0)
+            last_run = stats.get('last_run', '')
+        
+        # Create an expander for each URL with details
+        with st.expander(f"{i+1}. {display_url}", expanded=highlight_url):
+            # URL info
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                if description:
+                    st.markdown(f"**Description:** {description}")
+                
+                # Add description input field
+                new_description = st.text_input(
+                    "Enter or update description",
+                    value=description,
+                    key=f"desc_{i}_{url[-10:]}"  # Create unique key
+                )
+                
+                # Control buttons row with save description button, remove from pool, and remove from storage
+                btn_col1, btn_col2, btn_col3 = st.columns(3)
+                
+                # Save button for description
+                with btn_col1:
+                    if st.button("Save Description", key=f"save_{i}_{url[-10:]}"):
+                        if url_pool_service and new_description != description:
+                            if url_pool_service.update_url_description(url, new_description):
+                                # More visible success feedback
+                                st.success("✅ Description saved successfully!", icon="✅")
+                                modified = True
+                            else:
+                                st.error("❌ Failed to update description")
+                
+                # Remove from pool button (only removes from current session)
+                with btn_col2:
+                    if st.button("🔄 Remove from Pool", key=f"remove_pool_{i}_{url[-10:]}", 
+                               type="secondary", help="Remove this URL from current pool only (temporary)"):
+                        removed_index = i
+                        modified = True
+                        st.warning(f"✅ URL removed from pool: {display_url}")
+                
+                # Remove permanently button (removes from JSON storage)
+                with btn_col3:
+                    if st.button("🗑️ Delete Permanently", key=f"remove_storage_{i}_{url[-10:]}", 
+                               type="secondary", help="Remove this URL permanently from saved storage"):
+                        if url_pool_service:
+                            url_pool_service.remove_url_from_storage(url)
+                            removed_index = i
+                            modified = True
+                            st.error(f"🗑️ URL permanently deleted: {display_url}")
+            
+            with col2:
+                # Stats display
+                st.metric("Runs", run_count)
+                st.metric("Total Listings", total_listings)
+                if last_run:
+                    st.caption(f"Last run: {last_run}")
+        
+        # Also display URL with highlight if needed (outside expander)
         if highlight_url:
             st.markdown(f'<div class="next-url">🎯 NEXT: {i+1}. {display_url}</div>', 
                        unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="url-item">{i+1}. {display_url}</div>', 
-                       unsafe_allow_html=True)
+    
+    return modified, removed_index
 
 def display_status_card(title, message):
     """

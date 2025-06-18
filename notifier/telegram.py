@@ -68,12 +68,13 @@ def send_telegram_message(text, parse_mode=None):
     except Exception as e:
         return False, str(e)
 
-def format_car_listing_message(listing):
+def format_car_listing_message(listing, search_description=None):
     """
     Format a car listing for Telegram message
     
     Args:
         listing (dict): Car listing data
+        search_description (str, optional): Description of the search URL/filter
         
     Returns:
         str: Formatted message text
@@ -82,8 +83,23 @@ def format_car_listing_message(listing):
     price = listing.get("Price", "Unknown")
     location = listing.get("Location", "Unknown")
     url = listing.get("URL", "")
+    source_url = listing.get("source_url", "")
     
-    message = f"""🚗 <b>New Car Listing</b>
+    # Try to get URL description from listing, or use provided search_description
+    if not search_description and source_url:
+        # Import here to avoid circular imports
+        from services.url_pool_service import UrlPoolService
+        url_service = UrlPoolService()
+        url_data = url_service.get_url_data()
+        
+        if source_url in url_data and url_data[source_url].get('description'):
+            search_description = url_data[source_url]['description']
+    
+    header = "🚗 <b>New Car Listing</b>"
+    if search_description:
+        header += f"\n<i>{search_description}</i>"
+    
+    message = f"""{header}
 
 <b>{title}</b>
 💰 {price}
