@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from notifier.telegram import send_telegram_message, format_car_listing_message
+from proxy.manager import ProxyManager, ProxyType
 
 def parse_listing(item, base_url=""):
     try:
@@ -44,17 +45,58 @@ def parse_listing(item, base_url=""):
         print(f"[!] Error parsing listing: {e}")
         return None
 
-def fetch_listings_from_url(url):
+def fetch_listings_from_url(url, use_proxy=False, proxy_manager=None):
     from urllib.parse import urlparse
+    from proxy.manager import ProxyManager, ProxyType
     
     # Extract base URL for dynamic URL construction
     parsed_url = urlparse(url)
     base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
     
+    # Get proxy manager if needed
+    if use_proxy and proxy_manager is None:
+        proxy_manager = ProxyManager.create_from_environment()
+    
+    # Initialize the IP address variable
+    current_ip = "Unknown"
+    
+    # Show the IP address being used right before making the request
+    if proxy_manager:
+        current_ip = proxy_manager.get_current_ip()
+        print(f"[*] Current IP address: {current_ip}")
+    
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context()
+        browser_options = {}
+        
+        # Configure proxy if requested
+        using_proxy = False
+        if use_proxy and proxy_manager and proxy_manager.proxy_type != ProxyType.NONE:
+            proxy_config = proxy_manager.get_playwright_proxy()
+            if proxy_config:
+                browser_options["proxy"] = proxy_config
+                using_proxy = True
+                print(f"[*] Using proxy: {proxy_manager.proxy_type.name}")
+        
+        browser = p.chromium.launch(headless=True, **browser_options)
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        )
         page = context.new_page()
+        
+        # Check our IP address before scraping to verify proxy
+        try:
+            page.goto("https://httpbin.org/ip", wait_until="networkidle", timeout=30000)
+            ip_content = page.content()
+            import re
+            ip_match = re.search(r'"origin":\s*"([^"]+)"', ip_content)
+            if ip_match:
+                current_ip = ip_match.group(1)
+                print(f"[*] Current IP address: {current_ip}")
+            else:
+                print("[!] Could not determine IP address")
+        except Exception as e:
+            print(f"[!] Error checking IP: {str(e)}")
+            
         print(f"[*] Navigating to marketplace search page: {url}")
         page.goto(url, wait_until="networkidle")
         
@@ -84,7 +126,9 @@ def fetch_listings_from_url(url):
                     continue
             
             if has_no_results:
-                return []
+                context.close()
+                browser.close()
+                return [], current_ip, using_proxy
             
             # Wait for listings to load but with shorter timeout
             try:
@@ -131,20 +175,54 @@ def fetch_listings_from_url(url):
         context.close()
         browser.close()
     
-    return [l for l in parsed if l]
+    return [l for l in parsed if l], current_ip, using_proxy
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", type=str, required=True)
     parser.add_argument("--notify", action="store_true", help="Send Telegram notifications for new listings")
     parser.add_argument("--notify-count", type=int, default=5, help="Number of top listings to notify (default: 5)")
+    parser.add_argument("--use-proxy", action="store_true", help="Use proxy configuration from environment")
+    parser.add_argument("--proxy-type", type=str, choices=[pt.name for pt in ProxyType], 
+                        default="NONE", help="Type of proxy to use")
     args = parser.parse_args()
     
-    listings = fetch_listings_from_url(args.url)
+    # Set up proxy manager and always show IP information
+    try:
+        # First check direct IP without proxy for comparison
+        direct_manager = ProxyManager(ProxyType.NONE)
+        direct_ip = direct_manager.get_current_ip()
+        print(f"[*] Your direct IP address: {direct_ip}")
+        
+        # Set up proxy if requested
+        proxy_manager = None
+        if args.use_proxy or args.proxy_type != "NONE":
+            proxy_type = ProxyType[args.proxy_type]
+            proxy_manager = ProxyManager(proxy_type)
+            print(f"[*] Using proxy type: {proxy_type.name}")
+            
+            # Show the IP address being used with the proxy
+            if proxy_manager:
+                proxy_ip = proxy_manager.get_current_ip()
+                print(f"[*] Your IP through WebShare proxy: {proxy_ip}")
+                
+                # Verify proxy is working by comparing IPs
+                if proxy_ip == direct_ip:
+                    print("[!] WARNING: Proxy IP is the same as direct IP. Proxy might not be working correctly.")
+                else:
+                    print("[+] Proxy confirmed working - your IP is masked.")
+        else:
+            print("[*] Not using proxy - requests will use your direct IP address.")
+    except Exception as e:
+        print(f"[!] Error checking IP addresses: {str(e)}")
+        print("[!] Will continue with scraping, but IP information is unavailable.")
+    
+    listings, used_ip, _ = fetch_listings_from_url(args.url, args.use_proxy, proxy_manager)
     # Save results
     with open("storage/latest_results.json", "w", encoding="utf-8") as f:
         json.dump(listings, f, ensure_ascii=False, indent=2)
     print(f"[+] Wrote {len(listings)} listings to storage/latest_results.json")
+    print(f"[*] Scraping completed using IP: {used_ip}")
     
     # Send notifications if requested
     if args.notify and listings:

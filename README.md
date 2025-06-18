@@ -18,6 +18,8 @@ A modern, service-oriented web scraping system designed to collect car listings 
 - **🌐 Web Dashboard**: Interactive Streamlit interface with real-time monitoring
 - **⚡ CLI Interface**: Command-line tools for automation and scripting
 - **🔧 Service-Oriented Architecture**: Clean separation of concerns with specialized services
+- **🌍 Proxy Support**: WebShare rotating residential proxy integration to avoid blocking
+- **📊 IP Tracking**: Track and monitor which IPs are used to access each URL
 - **📊 JSON-based Storage**: Efficient data persistence with extensible service layer
 
 ## 🚀 Quick Start

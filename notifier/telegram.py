@@ -97,7 +97,7 @@ def format_car_listing_message(listing, search_description=None):
     
     header = "🚗 <b>New Car Listing</b>"
     if search_description:
-        header += f"\n<i>{search_description}</i>"
+        header += f"\n<b>{search_description}</b>"
     
     message = f"""{header}
 

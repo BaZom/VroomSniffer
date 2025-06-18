@@ -505,7 +505,8 @@ def run_scheduler(
     runs: int = 5,
     random_selection: bool = False,
     notify_new: bool = False,
-    notify_count: int = 5
+    notify_count: int = 5,
+    check_ip_rotation: bool = True
 ) -> None:
     """
     Run the scheduler for periodic scraping
@@ -570,6 +571,17 @@ def run_scheduler(
                     
                 next_run_in = services.scheduler_service.get_time_until_next_scrape()
                 print(f"[*] Next run in {int(next_run_in)} seconds")
+                
+                # Check for IP rotation if using proxies
+                if check_ip_rotation and services.scraper_service.use_proxy:
+                    from proxy.manager import ProxyManager, ProxyType
+                    try:
+                        proxy_type = ProxyType[services.scraper_service.proxy_type]
+                        proxy_manager = ProxyManager(proxy_type)
+                        current_ip = proxy_manager.get_current_ip()
+                        print(f"[*] Current IP through proxy: {current_ip}")
+                    except Exception as e:
+                        print(f"[!] Error checking current IP: {str(e)}")
             
             # Sleep for a short time to avoid CPU spinning
             time.sleep(1)

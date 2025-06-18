@@ -13,6 +13,7 @@ from providers.services_provider import (
     get_notification_service
 )
 from notifier.telegram import send_telegram_message, format_car_listing_message
+from ui.components.ip_tracking import display_ip_tracking
 
 def show_data_storage_page(all_old_path, latest_new_path):
     """Data storage page with clean interface for viewing and managing cached data."""
@@ -68,7 +69,7 @@ def show_data_storage_page(all_old_path, latest_new_path):
     st.divider()
     
     # Main tabs
-    tab1, tab2 = st.tabs(["🔍 Search & Browse", "📊 Insights & Analytics"])
+    tab1, tab2, tab3 = st.tabs(["🔍 Search & Browse", "📊 Insights & Analytics", "🌐 IP Tracking"])
     
     with tab1:
         # Search and filter interface
@@ -282,3 +283,7 @@ def show_data_storage_page(all_old_path, latest_new_path):
                     st.write(f"• Premium (> €25k): {high_price} listings")
         else:
             st.info("No data available for analytics")
+            
+    # IP Tracking tab
+    with tab3:
+        display_ip_tracking()

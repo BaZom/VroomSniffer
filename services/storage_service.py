@@ -13,6 +13,7 @@ class StorageService:
         """Initialize with configurable file paths"""
         self.all_old_path = all_old_path or str(Path(__file__).parent.parent / "storage" / "all_old_results.json")
         self.latest_new_path = latest_new_path or str(Path(__file__).parent.parent / "storage" / "latest_new_results.json")
+        self.ip_tracking_path = str(Path(__file__).parent.parent / "storage" / "ip_tracking.json")
     
     def load_cache(self, cache_path=None):
         """
@@ -321,3 +322,110 @@ class StorageService:
             filtered = price_filtered
         
         return filtered
+    
+    def track_ip_for_url(self, url, ip, is_proxy=False, ip_tracking_path=None):
+        """
+        Track IP address used for a specific URL
+        
+        Args:
+            url: The URL being accessed
+            ip: The IP address used to access the URL
+            is_proxy: Whether this IP is a proxy IP (True) or direct IP (False)
+            ip_tracking_path: Path to IP tracking file (optional)
+            
+        Returns:
+            dict: Updated tracking data
+        """
+        path = ip_tracking_path or self.ip_tracking_path
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        
+        # Load existing data or create new structure
+        try:
+            if Path(path).exists():
+                with open(path, "r", encoding="utf-8") as f:
+                    tracking_data = json.load(f)
+            else:
+                tracking_data = {"url_ip_mapping": {}, "last_updated": ""}
+        except json.JSONDecodeError:
+            tracking_data = {"url_ip_mapping": {}, "last_updated": ""}
+        
+        # Ensure url_ip_mapping exists
+        if "url_ip_mapping" not in tracking_data:
+            tracking_data["url_ip_mapping"] = {}
+        
+        # Add or update the entry for this URL
+        if url not in tracking_data["url_ip_mapping"]:
+            tracking_data["url_ip_mapping"][url] = []
+        
+        # Add new IP entry with timestamp and proxy info
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Check if the same IP has been used before for this URL to avoid duplicates
+        for entry in tracking_data["url_ip_mapping"][url]:
+            if entry.get("ip") == ip and entry.get("is_proxy") == is_proxy:
+                # Update the existing entry with new timestamp
+                entry["last_used"] = timestamp
+                entry["use_count"] = entry.get("use_count", 1) + 1
+                break
+        else:  # This else belongs to the for loop (executes if no break)
+            # Add new IP entry
+            tracking_data["url_ip_mapping"][url].append({
+                "ip": ip,
+                "first_used": timestamp,
+                "last_used": timestamp,
+                "is_proxy": is_proxy,
+                "use_count": 1
+            })
+        
+        # Update last updated timestamp
+        tracking_data["last_updated"] = timestamp
+        
+        # Save updated data
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(tracking_data, f, ensure_ascii=False, indent=2)
+            
+        return tracking_data
+    
+    def get_ip_history_for_url(self, url, ip_tracking_path=None):
+        """
+        Get IP history for a specific URL
+        
+        Args:
+            url: The URL to get history for
+            ip_tracking_path: Path to IP tracking file (optional)
+            
+        Returns:
+            list: List of IP entries for the URL or empty list if not found
+        """
+        path = ip_tracking_path or self.ip_tracking_path
+        
+        try:
+            if Path(path).exists():
+                with open(path, "r", encoding="utf-8") as f:
+                    tracking_data = json.load(f)
+                    return tracking_data.get("url_ip_mapping", {}).get(url, [])
+            return []
+        except (json.JSONDecodeError, Exception):
+            return []
+    
+    def get_all_ip_tracking_data(self, ip_tracking_path=None):
+        """
+        Get all IP tracking data
+        
+        Args:
+            ip_tracking_path: Path to IP tracking file (optional)
+            
+        Returns:
+            dict: Complete IP tracking data or empty structure if not found
+        """
+        path = ip_tracking_path or self.ip_tracking_path
+        
+        try:
+            if Path(path).exists():
+                with open(path, "r", encoding="utf-8") as f:
+                    tracking_data = json.load(f)
+                    return tracking_data
+            return {"url_ip_mapping": {}, "last_updated": ""}
+        except (json.JSONDecodeError, Exception):
+            return {"url_ip_mapping": {}, "last_updated": ""}

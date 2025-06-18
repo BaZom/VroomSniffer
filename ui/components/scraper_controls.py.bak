@@ -66,10 +66,11 @@ def display_scraper_controls(scheduler_service):
             
             # Only show proxy type selection if use_proxy is enabled
             if st.session_state.use_proxy:
-                # IMPORTANT: Only show the two supported proxy types
                 proxy_options = {
                     "None": "NONE",
-                    "WebShare Residential": "WEBSHARE_RESIDENTIAL"
+                    "WebShare Residential": "WEBSHARE_RESIDENTIAL", 
+                    "WebShare Datacenter": "WEBSHARE_DATACENTER",
+                    "Custom Proxy": "CUSTOM"
                 }
                 st.session_state.proxy_type = st.selectbox(
                     "Proxy type",
@@ -79,46 +80,8 @@ def display_scraper_controls(scheduler_service):
                 )
                 # Convert display name to enum value
                 st.session_state.proxy_type = proxy_options[st.session_state.proxy_type]
-                
-                # Add verification button for WebShare Residential
-                if st.session_state.proxy_type == "WEBSHARE_RESIDENTIAL":
-                    st.info("🔄 Using WebShare rotating residential proxies. IP addresses used will be tracked.")
-                    
-                    if st.button("Verify Proxy"):
-                        # Import necessary modules
-                        import requests
-                        from proxy.manager import ProxyManager, ProxyType
-                        import os
-                        from dotenv import load_dotenv
-                        
-                        # Load environment variables
-                        load_dotenv()
-                        
-                        # Check WebShare credentials
-                        webshare_username = os.getenv("WEBSHARE_USERNAME", "")
-                        webshare_password = os.getenv("WEBSHARE_PASSWORD", "")
-                        
-                        if not webshare_username or not webshare_password:
-                            st.error("WebShare credentials missing! Add WEBSHARE_USERNAME and WEBSHARE_PASSWORD to your .env file.")
-                        else:
-                            try:
-                                # Get direct IP
-                                direct_response = requests.get("https://httpbin.org/ip", timeout=10)
-                                direct_ip = direct_response.json().get("origin", "Unknown")
-                                
-                                # Get proxy IP
-                                proxy_manager = ProxyManager(ProxyType.WEBSHARE_RESIDENTIAL)
-                                proxy_ip = proxy_manager.get_current_ip()
-                                
-                                if proxy_ip == direct_ip:
-                                    st.warning(f"⚠️ Proxy not working! Both IPs are the same: {direct_ip}")
-                                else:
-                                    st.success(f"✅ Proxy working! Direct IP: {direct_ip}, Proxy IP: {proxy_ip}")
-                            except Exception as e:
-                                st.error(f"❌ Error: {str(e)}")
             else:
                 st.session_state.proxy_type = "NONE"
-                
         if (prev_auto_send != st.session_state.auto_send_active or 
             prev_sound_effects != st.session_state.sound_effects_enabled or
             prev_random_selection != st.session_state.random_url_selection or
@@ -136,30 +99,38 @@ def display_scraper_controls(scheduler_service):
             step=30
         )
         
+        # Update scheduler service with new interval if changed
         if interval != prev_interval:
             scheduler_service.set_interval(interval)
             changed = True
-    
+            
     return changed
 
-def display_scraper_progress(current_url_index, total_urls, scheduler_service):
-    """Display progress indicators for scraping."""
+def display_scraper_progress(scheduler_service):
+    """
+    Display simplified scraper progress information.
     
-    # Runs count and limit display
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        total_runs = scheduler_service.get_total_runs() or 0
-        max_runs = scheduler_service.get_max_runs() or "∞"
+    Args:
+        scheduler_service: Instance of SchedulerService
+    """
+    if not scheduler_service.is_scraping_active():
+        return
         
-        if isinstance(max_runs, int) and max_runs > 0:
-            runs_text = f"{total_runs}/{max_runs}"
-        else:
-            runs_text = f"{total_runs}/∞"
-            
-        st.metric("Runs", runs_text)
+    # Create a unique key for this container to avoid duplication
+    with st.container():
+        # Use a simpler separator
+        st.divider()
         
-    with col2:
-        st.metric("URL Progress", f"{current_url_index + 1}/{total_urls}")
+        # Show minimal status information
+        total_runs = scheduler_service.get_total_runs()
+        time_until_next = scheduler_service.get_time_until_next_scrape()
+        progress = scheduler_service.get_progress_percentage()
         
-    return st.status("Scraper Status", expanded=True)
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            if time_until_next > 0:
+                st.progress(progress, text=f"Next: {int(time_until_next)}s")
+            else:
+                st.progress(1.0, text="Ready to scrape")
+        with col2:
+            st.metric("Total runs", total_runs)

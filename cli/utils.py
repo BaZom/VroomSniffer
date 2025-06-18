@@ -32,10 +32,10 @@ class CLIError(Exception):
 
 class Services:
     """Container for all service instances used by the CLI."""
-    def __init__(self):
+    def __init__(self, use_proxy=False, proxy_type=None):
         self.storage_service = get_storage_service()
         self.notification_service = get_notification_service()
-        self.scraper_service = get_scraper_service()
+        self.scraper_service = get_scraper_service(use_proxy=use_proxy, proxy_type=proxy_type)
         self.scheduler_service = get_scheduler_service()
         self.url_pool_service = get_url_pool_service()
         self.statistics_service = get_statistics_service()
@@ -59,9 +59,18 @@ class Services:
         return self._cached_paths.get(key, "")
 
 
-def get_services() -> Services:
-    """Create and return a Services instance."""
-    return Services()
+def get_services(use_proxy=False, proxy_type=None) -> Services:
+    """
+    Create and return a Services instance.
+    
+    Args:
+        use_proxy: Whether to use proxies for scraping
+        proxy_type: Optional specific proxy type to use
+        
+    Returns:
+        Services: Configured Services instance
+    """
+    return Services(use_proxy=use_proxy, proxy_type=proxy_type)
 
 
 def check_listings_exist(services: Services, file_path: Optional[str] = None) -> bool:
@@ -104,7 +113,10 @@ def load_saved_urls(services: Services) -> List[str]:
     try:
         with open(saved_urls_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-            urls = data.get("urls", [])
+            
+            # Extract URLs from url_data object instead of urls array
+            url_data = data.get("url_data", {})
+            urls = list(url_data.keys()) if url_data else []
             
             if not urls:
                 print("[!] No URLs found in saved_urls.json")

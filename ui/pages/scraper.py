@@ -29,9 +29,10 @@ from ui.components.scraper_controls import display_scraper_controls, display_scr
 # Initialize services via the provider
 storage_service = get_storage_service()
 notification_service = get_notification_service()
-scraper_service = get_scraper_service()
 url_pool_service = get_url_pool_service()
 scheduler_service = get_scheduler_service()
+
+# We'll initialize scraper_service with proxy settings from session state when needed
 
 def _show_system_status():
     """Display simplified system status."""
@@ -167,7 +168,80 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
                 def scraper_progress_callback(step, message, progress_value):
                     scrape_progress_bar.progress(progress_value, text=f"🔍 {message}")
                 
-                # Use our ScraperService instance from the module level
+                # Initialize scraper service with proxy settings from session state
+                use_proxy = st.session_state.get('use_proxy', False)
+                proxy_type = st.session_state.get('proxy_type', 'NONE')
+                scraper_service = get_scraper_service(use_proxy=use_proxy, proxy_type=proxy_type)
+                
+                # Log proxy settings for debugging
+                if use_proxy:
+                    print(f"[INFO] Using proxy: {proxy_type}")
+                    
+                    # Show proxy status in UI
+                    with scrape_status.container():
+                        ip_col1, ip_col2 = st.columns(2)
+                        
+                        # Import modules for IP checking
+                        import requests
+                        from proxy.manager import ProxyManager, ProxyType
+                        
+                        # Get direct IP
+                        try:
+                            direct_response = requests.get("https://httpbin.org/ip", timeout=10)
+                            direct_ip = direct_response.json().get("origin", "Unknown")
+                            with ip_col1:
+                                st.info(f"Your direct IP: {direct_ip}")
+                        except:
+                            direct_ip = "Unknown"
+                            with ip_col1:
+                                st.error("Couldn't retrieve direct IP")
+                        
+                        # Get proxy IP
+                        try:
+                            # Import os for env vars check
+                            import os
+                            from dotenv import load_dotenv
+                            
+                            # Load environment variables
+                            load_dotenv()
+                            
+                            # Check WebShare credentials first
+                            webshare_username = os.getenv("WEBSHARE_USERNAME", "")
+                            webshare_password = os.getenv("WEBSHARE_PASSWORD", "")
+                            
+                            if not webshare_username or not webshare_password:
+                                with ip_col2:
+                                    st.error("WebShare credentials missing! Add WEBSHARE_USERNAME and WEBSHARE_PASSWORD to your .env file.")
+                            else:
+                                # Create proxy manager and get IP
+                                proxy_enum = ProxyType.WEBSHARE_RESIDENTIAL if proxy_type == "WEBSHARE_RESIDENTIAL" else ProxyType.NONE
+                                proxy_manager = ProxyManager(proxy_enum)
+                                proxy_ip = proxy_manager.get_current_ip()
+                                
+                                with ip_col2:
+                                    if "Error" in proxy_ip:
+                                        st.error(f"Proxy error: {proxy_ip}")
+                                    elif proxy_ip != direct_ip:
+                                        st.success(f"WebShare proxy IP: {proxy_ip}")
+                                    else:
+                                        st.warning(f"WebShare proxy IP: {proxy_ip} (same as direct IP - proxy might not be working!)")
+                        except Exception as e:
+                            with ip_col2:
+                                st.error(f"Failed to get proxy IP: {str(e)}")
+                else:
+                    print("[INFO] Not using proxy")
+                    
+                    # Show direct IP only
+                    with scrape_status.container():
+                        try:
+                            import requests
+                            direct_response = requests.get("https://httpbin.org/ip", timeout=10)
+                            direct_ip = direct_response.json().get("origin", "Unknown")
+                            st.info(f"Your direct IP: {direct_ip}")
+                        except:
+                            st.error("Couldn't retrieve IP information")
+                
+                # Use our ScraperService instance with proxy settings
                 results = scraper_service.get_listings_for_filter(
                     filters,
                     url_pool_service.build_search_url_from_custom,

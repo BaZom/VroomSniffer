@@ -45,11 +45,53 @@ def get_notification_service():
         _notification_service = NotificationService()
     return _notification_service
 
-def get_scraper_service():
-    """Get or create the scraper service instance."""
+def get_scraper_service(use_proxy=False, proxy_type=None):
+    """
+    Get or create the scraper service instance.
+    
+    Args:
+        use_proxy: Whether to use proxies for scraping
+        proxy_type: Optional specific proxy type to use
+        
+    Returns:
+        ScraperService: The scraper service instance
+    """
     global _scraper_service
-    if _scraper_service is None:
-        _scraper_service = ScraperService(get_storage_service())
+    if _scraper_service is None or use_proxy:  # Always create new instance when proxy settings change
+        _scraper_service = ScraperService(
+            get_storage_service(),
+            get_url_pool_service(),
+            use_proxy=use_proxy,
+            proxy_type=proxy_type
+        )
+        
+        # Log proxy information if using proxy
+        if use_proxy and proxy_type:
+            from proxy.manager import ProxyManager, ProxyType
+            try:
+                proxy_type_enum = ProxyType[proxy_type]
+                proxy_manager = ProxyManager(proxy_type_enum)
+                print(f"[*] Using proxy type: {proxy_type}")
+                
+                # Get and print direct IP first
+                direct_manager = ProxyManager(ProxyType.NONE)
+                direct_ip = direct_manager.get_current_ip()
+                print(f"[*] Your direct IP address: {direct_ip}")
+                
+                # Get and print proxy IP
+                proxy_ip = proxy_manager.get_current_ip()
+                print(f"[*] Your IP through WebShare proxy: {proxy_ip}")
+                
+                # Verify proxy is working
+                if proxy_ip == direct_ip:
+                    print("[!] WARNING: Proxy IP is the same as direct IP. Proxy might not be working correctly.")
+                elif "Error" in proxy_ip:
+                    print("[!] WARNING: Could not confirm proxy IP. Proxy might not be working correctly.")
+                else:
+                    print("[+] Proxy confirmed working - your IP is masked.")
+            except Exception as e:
+                print(f"[!] Error checking proxy configuration: {str(e)}")
+    
     return _scraper_service
 
 def get_scheduler_service():

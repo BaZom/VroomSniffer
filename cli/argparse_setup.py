@@ -99,6 +99,18 @@ For more advanced features, use the Streamlit UI:
         default=-1,
         help="Controls notification behavior: -1 to send all new listings (default) or a positive number to limit notifications to that many listings"
     )
+    run_parser.add_argument(
+        "--use-proxy", 
+        action="store_true", 
+        help="Use proxy configuration from environment variables"
+    )
+    run_parser.add_argument(
+        "--proxy-type", 
+        type=str,
+        choices=["NONE", "WEBSHARE_RESIDENTIAL"],
+        default="NONE",
+        help="Type of proxy to use (default: NONE)"
+    )
     
     # Version command
     version_parser = subparsers.add_parser(
@@ -151,6 +163,30 @@ For more advanced features, use the Streamlit UI:
         type=int, 
         default=-1,
         help="Number of new listings to send notifications for (default: -1 to send all, or a positive number to limit notifications to that many listings)"
+    )
+    schedule_parser.add_argument(
+        "--use-proxy", 
+        action="store_true", 
+        help="Use proxy configuration from environment variables"
+    )
+    schedule_parser.add_argument(
+        "--proxy-type", 
+        type=str,
+        choices=["NONE", "WEBSHARE_RESIDENTIAL"],
+        default="NONE",
+        help="Type of proxy to use (default: NONE)"
+    )
+    
+    # Diagnostics command
+    diag_parser = subparsers.add_parser(
+        "diagnostics", 
+        help="Display diagnostic information",
+        description="Show various diagnostic information about the system, including IP tracking data."
+    )
+    diag_parser.add_argument(
+        "--show-ip-tracking",
+        action="store_true",
+        help="Display IP tracking information for URLs"
     )
     
     return parser

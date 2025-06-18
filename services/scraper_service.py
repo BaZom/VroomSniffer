@@ -11,13 +11,15 @@ from services.storage_service import StorageService
 class ScraperService:
     """Service for scraper execution and results handling"""
     
-    def __init__(self, storage_service=None, url_pool_service=None):
+    def __init__(self, storage_service=None, url_pool_service=None, use_proxy=False, proxy_type=None):
         """
         Initialize with optional service dependencies
         
         Args:
             storage_service: Optional StorageService instance
             url_pool_service: Optional UrlPoolService instance
+            use_proxy: Whether to use proxies for scraping
+            proxy_type: Optional specific proxy type to use
         """
         if storage_service:
             self.storage_service = storage_service
@@ -32,6 +34,8 @@ class ScraperService:
             self.url_pool_service = UrlPoolService()
         
         self.root_dir = Path(__file__).parent.parent
+        self.use_proxy = use_proxy
+        self.proxy_type = proxy_type
     
     def run_scraper_and_load_results(self, filters, build_search_url_ui, root_dir=None):
         """
@@ -57,8 +61,54 @@ class ScraperService:
                 url = build_search_url_ui(filters)
                 print(f"[DEBUG] Generated URL from filters: {url}")
                 print(f"[DEBUG] Filters used: {filters}")
+                
+            # Check IP before scraping if using proxy
+            direct_ip = "Unknown"
+            proxy_ip = None
+            proxy_manager = None
+            proxy_type = None
+            
+            # Import necessary modules here to avoid circular imports
+            import requests
+            from proxy.manager import ProxyManager, ProxyType
+                
+            # Create a proxy manager and get IP
+            try:
+                # Get direct IP regardless of proxy settings
+                try:
+                    direct_response = requests.get("https://httpbin.org/ip", timeout=10)
+                    direct_ip = direct_response.json().get("origin", "Unknown")
+                    print(f"[IP INFO] Your direct IP: {direct_ip}")
+                except Exception as e:
+                    print(f"[IP INFO ERROR] Failed to get direct IP: {str(e)}")
+                    direct_ip = "Unknown"
+                
+                # Handle proxy if enabled
+                if self.use_proxy:
+                    proxy_type = ProxyType.WEBSHARE_RESIDENTIAL if self.proxy_type == "WEBSHARE_RESIDENTIAL" else ProxyType.NONE
+                    proxy_manager = ProxyManager(proxy_type)
+                    
+                    # Get proxy IP if using proxy
+                    if proxy_type != ProxyType.NONE:
+                        try:
+                            proxy_ip = proxy_manager.get_current_ip()
+                            print(f"[IP INFO] Scraping with WebShare IP: {proxy_ip}")
+                            if proxy_ip == direct_ip:
+                                print("[WARNING] Proxy IP is same as direct IP - proxy might not be working!")
+                        except Exception as e:
+                            print(f"[IP INFO ERROR] Failed to get proxy IP: {str(e)}")
+                            proxy_ip = "Unknown"
+            except Exception as e:
+                print(f"[IP INFO ERROR] Failed to check IP information: {str(e)}")
             
             args = [sys.executable, str(self.root_dir / "scraper" / "engine.py"), "--url", url]
+            
+            # Add proxy arguments if needed
+            if self.use_proxy:
+                args.append("--use-proxy")
+                if self.proxy_type:
+                    args.extend(["--proxy-type", self.proxy_type])
+            
             result = subprocess.run(
                 args,
                 cwd=self.root_dir, capture_output=True, text=True
@@ -74,6 +124,15 @@ class ScraperService:
                 else:
                     print(f"[WARNING] Scraper completed but no results file found")
                     listings_data = []
+                
+                # Track the IP used for this URL
+                active_ip = proxy_ip if proxy_ip and self.use_proxy and proxy_type != ProxyType.NONE else direct_ip
+                is_proxy = proxy_ip is not None and self.use_proxy and proxy_type != ProxyType.NONE
+                try:
+                    self.storage_service.track_ip_for_url(url, active_ip, is_proxy)
+                    print(f"[IP TRACKING] Tracked {'proxy' if is_proxy else 'direct'} IP {active_ip} for URL: {url}")
+                except Exception as e:
+                    print(f"[IP TRACKING ERROR] Failed to track IP: {str(e)}")
             else:
                 print(f"[WARNING] Scraper failed: {result.stderr}")
                 print(f"[WARNING] Search URL was: {url}")
