@@ -40,11 +40,6 @@ from .argparse_setup import setup_parser
 from .diagnostics import display_ip_tracking
 
 
-
-
-
-
-
 def main() -> int:
     """
     Main entry point for the CLI.
@@ -55,12 +50,9 @@ def main() -> int:
     parser = setup_parser()
     args = parser.parse_args()
     
-    # Initialize services - pass proxy settings if we're running the scraper
-    use_proxy = False
-    proxy_type = None
-    if args.command == "run" and hasattr(args, "use_proxy"):
-        use_proxy = args.use_proxy
-        proxy_type = args.proxy_type if hasattr(args, "proxy_type") else None
+    # Initialize services - pass proxy settings if needed
+    use_proxy = args.use_proxy if hasattr(args, "use_proxy") else False
+    proxy_type = args.proxy_type if hasattr(args, "proxy_type") else None
     
     services = get_services(use_proxy=use_proxy, proxy_type=proxy_type)
     
@@ -76,14 +68,8 @@ def main() -> int:
     elif args.command == "run":
         run_scraper_with_url_improved(services, args.urls, args.notify_new, args.notify_count)
     elif args.command == "schedule":
-        # Update services with proxy settings if specified for schedule command
-        if hasattr(args, "use_proxy"):
-            use_proxy = args.use_proxy
-            proxy_type = args.proxy_type if hasattr(args, "proxy_type") else None
-            services = get_services(use_proxy=use_proxy, proxy_type=proxy_type)
         # Load URLs - either from command line or saved_urls.json
         urls = []
-        # If --use-saved flag is set or no URLs provided, load from saved_urls.json
         if args.use_saved or not args.urls:
             urls = load_saved_urls(services)
             if not urls:

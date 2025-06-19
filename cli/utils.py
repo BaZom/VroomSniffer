@@ -40,12 +40,7 @@ class Services:
         self.url_pool_service = get_url_pool_service()
         self.statistics_service = get_statistics_service()
         
-        # Cache common paths
-        self._cached_paths = {}
-        self.init_paths()
-        
-    def init_paths(self) -> None:
-        """Initialize common file paths."""
+        # Initialize common file paths
         storage_dir = Path(self.storage_service.all_old_path).parent
         self._cached_paths = {
             "latest_results": str(storage_dir / "latest_results.json"),

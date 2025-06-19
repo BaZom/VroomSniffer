@@ -68,14 +68,12 @@ def fetch_listings_from_url(url, use_proxy=False, proxy_manager=None):
     with sync_playwright() as p:
         browser_options = {}
         
-        # Configure proxy if requested
-        using_proxy = False
-        if use_proxy and proxy_manager and proxy_manager.proxy_type != ProxyType.NONE:
+        # Configure proxy if WebShare residential proxy is enabled
+        if use_proxy and proxy_manager and proxy_manager.proxy_type == ProxyType.WEBSHARE_RESIDENTIAL:
             proxy_config = proxy_manager.get_playwright_proxy()
             if proxy_config:
                 browser_options["proxy"] = proxy_config
-                using_proxy = True
-                print(f"[*] Using proxy: {proxy_manager.proxy_type.name}")
+                print(f"[*] Using WebShare residential proxy")
         
         browser = p.chromium.launch(headless=True, **browser_options)
         context = browser.new_context(
@@ -128,7 +126,7 @@ def fetch_listings_from_url(url, use_proxy=False, proxy_manager=None):
             if has_no_results:
                 context.close()
                 browser.close()
-                return [], current_ip, using_proxy
+                return [], current_ip, (use_proxy and proxy_manager and proxy_manager.proxy_type == ProxyType.WEBSHARE_RESIDENTIAL)
             
             # Wait for listings to load but with shorter timeout
             try:
@@ -175,7 +173,7 @@ def fetch_listings_from_url(url, use_proxy=False, proxy_manager=None):
         context.close()
         browser.close()
     
-    return [l for l in parsed if l], current_ip, using_proxy
+    return [l for l in parsed if l], current_ip, (use_proxy and proxy_manager and proxy_manager.proxy_type == ProxyType.WEBSHARE_RESIDENTIAL)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

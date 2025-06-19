@@ -1,9 +1,12 @@
 """
 Scraper control components for the VroomSniffer UI.
 """
+import os
 import streamlit as st
+import requests
+from dotenv import load_dotenv
 from ui.components.sound_effects import play_sound
-from proxy.manager import ProxyType
+from proxy.manager import ProxyManager, ProxyType
 
 def display_scraper_controls(scheduler_service):
     """
@@ -85,37 +88,7 @@ def display_scraper_controls(scheduler_service):
                     st.info("🔄 Using WebShare rotating residential proxies. IP addresses used will be tracked.")
                     
                     if st.button("Verify Proxy"):
-                        # Import necessary modules
-                        import requests
-                        from proxy.manager import ProxyManager, ProxyType
-                        import os
-                        from dotenv import load_dotenv
-                        
-                        # Load environment variables
-                        load_dotenv()
-                        
-                        # Check WebShare credentials
-                        webshare_username = os.getenv("WEBSHARE_USERNAME", "")
-                        webshare_password = os.getenv("WEBSHARE_PASSWORD", "")
-                        
-                        if not webshare_username or not webshare_password:
-                            st.error("WebShare credentials missing! Add WEBSHARE_USERNAME and WEBSHARE_PASSWORD to your .env file.")
-                        else:
-                            try:
-                                # Get direct IP
-                                direct_response = requests.get("https://httpbin.org/ip", timeout=10)
-                                direct_ip = direct_response.json().get("origin", "Unknown")
-                                
-                                # Get proxy IP
-                                proxy_manager = ProxyManager(ProxyType.WEBSHARE_RESIDENTIAL)
-                                proxy_ip = proxy_manager.get_current_ip()
-                                
-                                if proxy_ip == direct_ip:
-                                    st.warning(f"⚠️ Proxy not working! Both IPs are the same: {direct_ip}")
-                                else:
-                                    st.success(f"✅ Proxy working! Direct IP: {direct_ip}, Proxy IP: {proxy_ip}")
-                            except Exception as e:
-                                st.error(f"❌ Error: {str(e)}")
+                        verify_webshare_proxy()
             else:
                 st.session_state.proxy_type = "NONE"
                 
@@ -163,3 +136,33 @@ def display_scraper_progress(current_url_index, total_urls, scheduler_service):
         st.metric("URL Progress", f"{current_url_index + 1}/{total_urls}")
         
     return st.status("Scraper Status", expanded=True)
+
+def verify_webshare_proxy():
+    """Helper function to verify WebShare residential proxy configuration."""
+    # Load environment variables
+    load_dotenv()
+    
+    # Check WebShare credentials
+    webshare_username = os.getenv("WEBSHARE_USERNAME", "")
+    webshare_password = os.getenv("WEBSHARE_PASSWORD", "")
+    
+    if not webshare_username or not webshare_password:
+        st.error("WebShare credentials missing! Add WEBSHARE_USERNAME and WEBSHARE_PASSWORD to your .env file.")
+        return
+        
+    try:
+        # Get direct IP first
+        direct_response = requests.get("https://httpbin.org/ip", timeout=10)
+        direct_ip = direct_response.json().get("origin", "Unknown")
+        
+        # Get proxy IP
+        proxy_manager = ProxyManager(ProxyType.WEBSHARE_RESIDENTIAL)
+        proxy_ip = proxy_manager.get_current_ip()
+        
+        # Compare IPs to check if proxy is working
+        if proxy_ip == direct_ip:
+            st.warning(f"⚠️ Proxy not working! Both IPs are the same: {direct_ip}")
+        else:
+            st.success(f"✅ Proxy working! Direct IP: {direct_ip}, Proxy IP: {proxy_ip}")
+    except Exception as e:
+        st.error(f"❌ Error: {str(e)}")

@@ -84,20 +84,18 @@ class ScraperService:
                     direct_ip = "Unknown"
                 
                 # Handle proxy if enabled
-                if self.use_proxy:
-                    proxy_type = ProxyType.WEBSHARE_RESIDENTIAL if self.proxy_type == "WEBSHARE_RESIDENTIAL" else ProxyType.NONE
-                    proxy_manager = ProxyManager(proxy_type)
+                if self.use_proxy and self.proxy_type == "WEBSHARE_RESIDENTIAL":
+                    proxy_manager = ProxyManager(ProxyType.WEBSHARE_RESIDENTIAL)
                     
-                    # Get proxy IP if using proxy
-                    if proxy_type != ProxyType.NONE:
-                        try:
-                            proxy_ip = proxy_manager.get_current_ip()
-                            print(f"[IP INFO] Scraping with WebShare IP: {proxy_ip}")
-                            if proxy_ip == direct_ip:
-                                print("[WARNING] Proxy IP is same as direct IP - proxy might not be working!")
-                        except Exception as e:
-                            print(f"[IP INFO ERROR] Failed to get proxy IP: {str(e)}")
-                            proxy_ip = "Unknown"
+                    # Get WebShare proxy IP
+                    try:
+                        proxy_ip = proxy_manager.get_current_ip()
+                        print(f"[IP INFO] Scraping with WebShare IP: {proxy_ip}")
+                        if proxy_ip == direct_ip:
+                            print("[WARNING] Proxy IP is same as direct IP - proxy might not be working!")
+                    except Exception as e:
+                        print(f"[IP INFO ERROR] Failed to get proxy IP: {str(e)}")
+                        proxy_ip = "Unknown"
             except Exception as e:
                 print(f"[IP INFO ERROR] Failed to check IP information: {str(e)}")
             
@@ -126,8 +124,8 @@ class ScraperService:
                     listings_data = []
                 
                 # Track the IP used for this URL
-                active_ip = proxy_ip if proxy_ip and self.use_proxy and proxy_type != ProxyType.NONE else direct_ip
-                is_proxy = proxy_ip is not None and self.use_proxy and proxy_type != ProxyType.NONE
+                is_proxy = self.use_proxy and self.proxy_type == "WEBSHARE_RESIDENTIAL" and proxy_ip is not None
+                active_ip = proxy_ip if is_proxy else direct_ip
                 try:
                     self.storage_service.track_ip_for_url(url, active_ip, is_proxy)
                     print(f"[IP TRACKING] Tracked {'proxy' if is_proxy else 'direct'} IP {active_ip} for URL: {url}")
