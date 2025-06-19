@@ -62,7 +62,7 @@ def setup_parser() -> argparse.ArgumentParser:
         description=f"{Fore.CYAN}VroomSniffer Car Scraper CLI - Interact with JSON-based listing data{Style.RESET_ALL}",
         epilog=f"""
 {Back.BLUE}{Fore.WHITE} EXAMPLES: {Style.RESET_ALL}
-  %(prog)s run "https://www.example-marketplace.com/s-autos/bmw/k0c216"
+  %(prog)s run "https://www.example-marketplace.com/cars/search?brand=bmw"
   %(prog)s list
   %(prog)s search "bmw x5"  
   %(prog)s send 3
@@ -132,7 +132,7 @@ def setup_parser() -> argparse.ArgumentParser:
         "urls", 
         type=str, 
         nargs='+',
-        help="One or more marketplace search URLs (e.g., 'https://www.example-marketplace.com/s-autos/bmw/k0c216')"
+        help="One or more marketplace search URLs (e.g., 'https://www.example-marketplace.com/cars/search?brand=bmw')"
     )
     run_parser.add_argument(
         "--notify-new", 

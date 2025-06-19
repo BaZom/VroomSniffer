@@ -8,6 +8,22 @@
 
 A modern, service-oriented web scraping system designed to collect car listings from various online marketplaces, detect new listings, and send notifications via Telegram. Built with Python, Playwright, and Streamlit.
 
+## 📋 Table of Contents
+
+1. [Key Features](#-key-features)
+2. [Quick Start](#-quick-start)
+3. [Configuration](#configuration)
+4. [Usage](#-usage)
+   - [Command Line Interface](#command-line-interface)
+   - [Web Interface](#web-interface)
+5. [Documentation](#documentation)
+6. [Architecture](#architecture)
+7. [Project Structure](#project-structure)
+8. [Troubleshooting](#troubleshooting)
+9. [Disclaimer](#-disclaimer)
+10. [Contributing](#contributing)
+11. [License](#license)
+
 ## ✨ Key Features
 
 - **🎭 Modern Web Scraping**: Playwright-based engine handles JavaScript-heavy sites
@@ -53,7 +69,7 @@ playwright install
 
 **Test the scraper:**
 ```bash
-python cli/main.py run "https://www.example-marketplace.com/s-autos/bmw/k0c216"
+python cli/main.py run "https://www.example-marketplace.com/cars/search?brand=bmw"
 ```
 
 **View results:**
@@ -66,38 +82,103 @@ python cli/main.py list
 streamlit run ui/pages/scraper.py
 ```
 
+## Configuration
+
+VroomSniffer uses environment variables for configuration. An example file `.env.proxy.example` is provided with settings for both Telegram notifications and proxy configuration.
+
+1. **Copy the example file**:
+   ```bash
+   cp .env.proxy.example .env
+   ```
+
+2. **Edit the .env file** with your specific settings:
+   - For Telegram notifications, set your bot token and chat ID
+   - For proxy support, configure your WebShare credentials
+
+3. **Test your setup**:
+   ```bash
+   # Test Telegram notifications
+   python cli/main.py run "https://www.example-marketplace.com/cars/search?brand=bmw" --notify-new
+   
+   # Test proxy functionality
+   python scripts/verify_proxy.py
+   ```
+
+For detailed instructions on configuration:
+- [IP Tracking Guide](./docs/ip_tracking_guide.md)
+- [Proxy Guide](./docs/proxy_guide.md)
+
 ## 📋 Usage
 
 ### Command Line Interface
 
-The CLI provides the primary interface for running the scraper and managing results:
+The CLI provides a powerful interface for running the scraper and managing results.
+
+#### Essential Commands
 
 ```bash
-# Run the scraper with a marketplace search URL
-python cli/main.py run "https://marketplace-url.com/search-cars"
+# Run the scraper on a marketplace URL
+python cli/main.py run "https://www.example-marketplace.com/cars/search?brand=bmw"
 
-# Run with auto-notifications (sends new listings automatically)
-python cli/main.py run "https://marketplace-url.com/search-cars" --notify --notify-count 3
+# View the latest results (first 10 by default)
+python cli/main.py list
 
-# Schedule periodic scraping (every 60 seconds for 10 runs)
-python cli/main.py schedule "https://marketplace-url.com/search-cars" --interval 60 --runs 10 --notify
+# Search for specific listings
+python cli/main.py search "diesel automatic"
+
+# Send selected listings to Telegram
+python cli/main.py send 1 3 5
 ```
 
-Additional CLI commands include search capabilities, sending to Telegram, and viewing version information.
+#### Automation & Scheduling
+
+```bash
+# Schedule periodic scraping (every 5 minutes, 10 runs)
+python cli/main.py schedule "https://www.example-marketplace.com/cars/search?brand=bmw" --interval 300 --runs 10
+
+# Continuous monitoring with saved URLs (until manually stopped)
+python cli/main.py schedule --use-saved --random --runs 0 --interval 300
+```
+
+#### Proxy & Notification Features
+
+```bash
+# Run with notifications for new listings
+python cli/main.py run "https://www.example-marketplace.com/cars/search?brand=bmw" --notify-new
+
+# Run with proxy support to avoid IP blocking
+python cli/main.py run "https://www.example-marketplace.com/cars/search?brand=bmw" --use-proxy --proxy-type WEBSHARE_RESIDENTIAL
+
+# View IP tracking information
+python cli/main.py diagnostics --show-ip-tracking
+```
+
+For comprehensive CLI documentation, see [CLI Documentation](./docs/cli_documentation.md).
 
 ### Web Interface
 
-Launch the interactive Streamlit dashboard for advanced filtering and monitoring:
+The Streamlit dashboard provides an interactive interface for monitoring and managing car listings.
+
+#### Starting the UI
 
 ```bash
 streamlit run ui/pages/scraper.py
 ```
 
-**Key Features:**
-- **🔄 Flexible Auto-monitoring**: Set custom intervals from 30 seconds to 1 hour
-- **📲 Auto-notifications**: Automatically send new listings to Telegram  
-- **🎛️ Interactive controls**: Manual monitoring with one click
-- **📊 Real-time analytics**: Price trends and statistics
+#### Key UI Features
+
+- **🔍 URL Management**: Add, save, and organize marketplace URLs
+- **🔄 Interactive Monitoring**: Run manual scans or set up automatic monitoring
+- **⚙️ Scraper Controls**: Run immediately or schedule automatic monitoring
+- **⏱️ Flexible Scheduling**: Set custom intervals from 30 seconds to 1 hour
+- **📱 Notification Settings**: Configure Telegram notifications
+- **📲 Auto-notifications**: Automatically send new listings to Telegram
+- **🌐 Proxy Configuration**: Set up and test WebShare residential proxies
+- **📊 Results View**: Browse and filter car listings with detailed information
+- **📈 Statistics**: Track prices and listing counts over time
+- **🛠️ IP Monitoring**: View and analyze IP usage for each URL
+- **📊 Data Visualization**: View price trends and statistics
+- **🧪 Playground**: Test specific features and functionalities
 
 ## Project Structure
 
@@ -119,21 +200,9 @@ car_scraper/
 
 For a detailed breakdown of each component, see the [Architecture Documentation](./docs/architecture.md).
 
-## Configuration
-
-### Telegram Integration
-Configure Telegram notifications for automatic car listing alerts:
-
-1. Create a Telegram bot via @BotFather
-2. Get your bot token and chat ID  
-3. Configure environment variables in `.env`
-
-### Proxy Support
-Configure proxy rotation in `proxy/manager.py` for enhanced scraping reliability.
-
 ## Architecture
 
-VroomSniffer follows a service-oriented architecture with specialized services for different concerns. The system uses the Service Provider pattern for dependency management and a clean separation between UI/CLI and business logic.
+VroomSniffer follows a service-oriented architecture with specialized services for different concerns.
 
 ### Architecture Diagram
 
@@ -165,13 +234,25 @@ VroomSniffer follows a service-oriented architecture with specialized services f
 
 ### Key Components
 
-- **UI & CLI Layers**: Thin entry points with no business logic
-- **Services Provider**: Centralized dependency manager
-- **Service Layer**: Contains all business logic in specialized service classes
+- **UI & CLI Layers**: Thin entry points with minimal business logic
+- **Services Provider**: Centralized dependency injection system
+- **Service Layer**: Contains all business logic in specialized service classes:
+  - **ScraperService**: Handles web scraping operations
+  - **StorageService**: Manages data persistence and retrieval
+  - **NotificationService**: Handles Telegram notifications
+  - **SchedulerService**: Manages timing and scheduling
+  - **StatisticsService**: Provides analytics and reporting
 - **Infrastructure**: Storage, scraping engine, and notification systems
 
-For detailed architecture information, see the [Architecture Documentation](./docs/architecture.md).
-For guidance on adding new features, see [Feature Implementation Guide](./docs/feature_implementation_guide.md).
+## Documentation
+
+VroomSniffer includes comprehensive documentation to help you understand and extend the system:
+
+- [CLI Documentation](./docs/cli_documentation.md) - Complete command reference with all options
+- [Architecture Documentation](./docs/architecture.md) - Detailed system design and component interactions
+- [Feature Implementation Guide](./docs/feature_implementation_guide.md) - Guide for adding new features
+- [IP Tracking Guide](./docs/ip_tracking_guide.md) - Information about IP tracking capabilities
+- [Proxy Guide](./docs/proxy_guide.md) - Guide for using proxies with VroomSniffer
 
 ## Troubleshooting
 
@@ -199,27 +280,3 @@ For guidance on adding new features, see [Feature Implementation Guide](./docs/f
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## CLI Documentation
-
-The VroomSniffer CLI provides a powerful command-line interface for scraping, managing listings, and sending notifications. All CLI documentation is now available in a single comprehensive document:
-
-- [Complete CLI Documentation](./docs/cli_documentation.md) - Everything you need to know about using and extending the CLI
-
-**Basic CLI Usage:**
-
-```bash
-# Run the scraper
-python cli/main.py run "https://www.example-marketplace.com/s-autos/bmw/k0c216"
-
-# List results
-python cli/main.py list
-
-# Search results
-python cli/main.py search "320d"
-
-# Schedule automatic scraping
-python cli/main.py schedule --use-saved --random --interval 300 --notify-new
-```
-
-For more information, check the [Complete CLI Documentation](./docs/cli_documentation.md).
