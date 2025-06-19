@@ -2,6 +2,7 @@
 Scraper control components for the VroomSniffer UI.
 """
 import os
+import time
 import streamlit as st
 import requests
 from dotenv import load_dotenv
@@ -55,7 +56,7 @@ def display_scraper_controls(scheduler_service):
         prev_use_proxy = st.session_state.get('use_proxy', False)
         prev_proxy_type = st.session_state.get('proxy_type', 'NONE')
         
-        # Add proxy controls
+        # Add controls
         with st.expander("Advanced Settings"):
             # Existing settings
             st.session_state.auto_send_active = st.toggle("Auto-send new findings", prev_auto_send)
@@ -116,26 +117,44 @@ def display_scraper_controls(scheduler_service):
     return changed
 
 def display_scraper_progress(current_url_index, total_urls, scheduler_service):
-    """Display progress indicators for scraping."""
+    """Display improved progress indicators for scraping without duplicate progress bars."""
     
-    # Runs count and limit display
-    col1, col2 = st.columns(2)
+    # Create a clean status display with key information
+    status_container = st.status("Scraper Status", expanded=True)
     
-    with col1:
-        total_runs = scheduler_service.get_total_runs() or 0
-        max_runs = scheduler_service.get_max_runs() or "∞"
+    with status_container:
+        # Information grid - 2x2 layout
+        col1, col2 = st.columns(2)
         
-        if isinstance(max_runs, int) and max_runs > 0:
-            runs_text = f"{total_runs}/{max_runs}"
+        with col1:
+            # Show total runs with unlimited indicator
+            total_runs = scheduler_service.get_total_runs() or 0
+            st.metric("Total Runs", f"{total_runs}/∞", help="Total scrapes performed / No limit")
+        
+        with col2:
+            # Show URL progress as fraction
+            st.metric("URL Progress", f"{current_url_index + 1} of {total_urls}", 
+                     help="Current URL being processed / Total URLs")
+        
+        # Timeline display
+        next_scrape_in = max(0, scheduler_service.get_next_scrape_time() - time.time())
+        
+        # Create a visual timeline display instead of a progress bar
+        time_info = f"Next scrape in: {int(next_scrape_in)} seconds" if next_scrape_in > 0 else "Scraping now..."
+        
+        # Display using emoji indicators
+        if next_scrape_in <= 0:
+            st.info("⚡ **Scraping active now!**")
+        elif next_scrape_in < 5:
+            st.info(f"🔜 **Scraping starting in {int(next_scrape_in)} seconds**")
         else:
-            runs_text = f"{total_runs}/∞"
+            st.info(f"⏱️ **Next scrape in {int(next_scrape_in)} seconds**")
             
-        st.metric("Runs", runs_text)
+        # Additional context without progress bars
+        proxy_status = "Yes" if st.session_state.get('use_proxy', False) else "No" 
+        st.caption(f"**Configuration:** Interval: {scheduler_service.get_interval()} sec | Using proxy: {proxy_status}")
         
-    with col2:
-        st.metric("URL Progress", f"{current_url_index + 1}/{total_urls}")
-        
-    return st.status("Scraper Status", expanded=True)
+    return status_container
 
 def verify_webshare_proxy():
     """Helper function to verify WebShare residential proxy configuration."""

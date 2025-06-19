@@ -1,6 +1,6 @@
 """
 SchedulerService - Handles scheduling of scraping jobs.
-Responsible for managing intervals, scheduling, and timing of scraping operations.
+Responsible for managing intervals, scheduling, and t    def get_time_until_next_scrape(self):aping operations.
 """
 import time
 import random
@@ -98,12 +98,50 @@ class SchedulerService:
     def get_total_runs(self):
         """Get the total number of scraper runs"""
         return self.total_runs
-    
-    def set_total_runs(self, count):
-        """Set the total number of scraper runs (for loading from state)"""
-        self.total_runs = count
+        
+    def set_total_runs(self, runs):
+        """
+        Set the total number of scraper runs (for synchronization with UI)
+        
+        Args:
+            runs: The new run count to set
+            
+        Returns:
+            int: The updated run count
+        """
+        self.total_runs = runs
         return self.total_runs
         
+    def get_next_scrape_time(self):
+        """
+        Calculate the timestamp of the next scheduled scrape
+        
+        Returns:
+            float: Unix timestamp of the next scrape time
+        """
+        if not self.scraping_active:
+            return 0
+        
+        return self.last_scrape_time + self.interval_seconds
+    
+    # Simplified method to support display in UI
+    def get_max_runs(self):
+        """
+        For UI display compatibility - always returns None for unlimited runs
+        """
+        return None
+        
+    def get_time_until_next_scrape(self):
+        """
+        Check if the scraper has reached its maximum number of runs
+        
+        Returns:
+            bool: True if max runs reached, False otherwise or if unlimited
+        """
+        if self.max_runs <= 0:  # 0 or negative means unlimited
+            return False
+        return self.total_runs >= self.max_runs
+    
     def get_time_until_next_scrape(self):
         """
         Calculate time remaining until the next scrape

@@ -43,9 +43,9 @@ class NotificationService:
         failed = []
         
         # Process listings in batches to avoid rate limiting issues
-        batch_size = 15  # Process 15 at a time
-        delay_between_msgs = 3  # 3 seconds between messages
-        longer_delay_between_batches = 10  # 10 seconds between batches
+        batch_size = 15  # Process 15 at a time (20 triggered rate limits)
+        delay_between_msgs = 1  # 1 second between messages
+        longer_delay_between_batches = 7  # 7 seconds between batches
         
         total_listings = len(listings)
         
@@ -62,10 +62,26 @@ class NotificationService:
                 formatted_msg = self.format_car_listing_message(listing)
                 success, error = self.send_telegram_message(formatted_msg, parse_mode=parse_mode)
                 
-                # Retry once if network error
-                if not success and error and ("ConnectionResetError" in error or "Connection aborted" in error) and retry_on_network_error:
-                    time.sleep(2)
-                    success, error = self.send_telegram_message(formatted_msg, parse_mode=parse_mode)
+                # Handle errors with intelligent retries
+                if not success and error:
+                    retry_wait = 2  # Default retry wait time
+                    should_retry = False
+                    
+                    # Check if it's a network error
+                    if ("ConnectionResetError" in error or "Connection aborted" in error) and retry_on_network_error:
+                        should_retry = True
+                    
+                    # Check if it's a rate limit error
+                    elif isinstance(error, dict) and error.get("error_code") == 429:
+                        retry_after = error.get("parameters", {}).get("retry_after", 30)
+                        retry_wait = retry_after + 2  # Add a buffer
+                        should_retry = True
+                        print(f"[*] Hit Telegram rate limit. Waiting {retry_wait} seconds before retry...")
+                    
+                    # Perform retry if needed
+                    if should_retry:
+                        time.sleep(retry_wait)
+                        success, error = self.send_telegram_message(formatted_msg, parse_mode=parse_mode)
                 
                 if success:
                     success_count += 1

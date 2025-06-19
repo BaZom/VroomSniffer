@@ -652,16 +652,6 @@ def run_scheduler(
                 minutes, seconds = divmod(int(next_run_in), 60)
                 time_str = f"{minutes}m {seconds}s" if minutes > 0 else f"{seconds}s"
                 print(f"{Fore.CYAN}[*] Next run in {time_str}{Style.RESET_ALL}")
-                
-                # Check for IP rotation if using WebShare proxy
-                if check_ip_rotation and services.scraper_service.use_proxy and services.scraper_service.proxy_type == "WEBSHARE_RESIDENTIAL":
-                    from proxy.manager import ProxyManager, ProxyType
-                    try:
-                        proxy_manager = ProxyManager(ProxyType.WEBSHARE_RESIDENTIAL)
-                        current_ip = proxy_manager.get_current_ip()
-                        print(f"{Fore.MAGENTA}[*] Current IP through WebShare proxy: {current_ip}{Style.RESET_ALL}")
-                    except Exception as e:
-                        print(f"{Fore.RED}[✗] Error checking current IP: {str(e)}{Style.RESET_ALL}")
             
             # Sleep for a short time to avoid CPU spinning
             time.sleep(1)

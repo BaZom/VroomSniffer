@@ -63,32 +63,16 @@ def get_scraper_service(use_proxy=False, proxy_type=None):
             get_url_pool_service(),
             use_proxy=use_proxy,
             proxy_type=proxy_type
-        )
-        
-        # Log proxy information if using proxy
+        )        # Proxy information is now handled by scraper_service.py
+        # Silently configure proxy settings without duplicating logs
         if use_proxy and proxy_type:
+            # Just validate the proxy type without printing anything
             from proxy.manager import ProxyManager, ProxyType
             try:
+                # Just check the proxy type is valid - actual connection will be tested in scraper_service
                 proxy_type_enum = ProxyType[proxy_type]
-                proxy_manager = ProxyManager(proxy_type_enum)
-                print(f"[*] Using proxy type: {proxy_type}")
-                
-                # Get and print direct IP first
-                direct_manager = ProxyManager(ProxyType.NONE)
-                direct_ip = direct_manager.get_current_ip()
-                print(f"[*] Your direct IP address: {direct_ip}")
-                
-                # Get and print proxy IP
-                proxy_ip = proxy_manager.get_current_ip()
-                print(f"[*] Your IP through WebShare proxy: {proxy_ip}")
-                
-                # Verify proxy is working
-                if proxy_ip == direct_ip:
-                    print("[!] WARNING: Proxy IP is the same as direct IP. Proxy might not be working correctly.")
-                elif "Error" in proxy_ip:
-                    print("[!] WARNING: Could not confirm proxy IP. Proxy might not be working correctly.")
-                else:
-                    print("[+] Proxy confirmed working - your IP is masked.")
+            except KeyError:
+                print(f"[!] Invalid proxy type: {proxy_type}. Valid options are: {[pt.name for pt in ProxyType]}")
             except Exception as e:
                 print(f"[!] Error checking proxy configuration: {str(e)}")
     

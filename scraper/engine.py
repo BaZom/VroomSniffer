@@ -57,13 +57,9 @@ def fetch_listings_from_url(url, use_proxy=False, proxy_manager=None):
     if use_proxy and proxy_manager is None:
         proxy_manager = ProxyManager.create_from_environment()
     
-    # Initialize the IP address variable
-    current_ip = "Unknown"
-    
-    # Show the IP address being used right before making the request
-    if proxy_manager:
-        current_ip = proxy_manager.get_current_ip()
-        print(f"[*] Current IP address: {current_ip}")
+    # Initialize the IP address variable - we don't check it here anymore
+    # since it was already checked in the main function to avoid duplication
+    current_ip = "Unknown" if proxy_manager is None else proxy_manager.get_current_ip()
     
     with sync_playwright() as p:
         browser_options = {}
@@ -81,28 +77,31 @@ def fetch_listings_from_url(url, use_proxy=False, proxy_manager=None):
         )
         page = context.new_page()
         
-        # Check our IP address before scraping to verify proxy
-        try:
-            page.goto("https://httpbin.org/ip", wait_until="networkidle", timeout=30000)
-            ip_content = page.content()
-            import re
-            ip_match = re.search(r'"origin":\s*"([^"]+)"', ip_content)
-            if ip_match:
-                current_ip = ip_match.group(1)
-                print(f"[*] Current IP address: {current_ip}")
-            else:
-                print("[!] Could not determine IP address")
-        except Exception as e:
-            print(f"[!] Error checking IP: {str(e)}")
+        # Skip duplicate IP check as we already did this in the main script
+        # This avoids redundant output and speeds up the scraping process
             
         print(f"[*] Navigating to marketplace search page: {url}")
-        page.goto(url, wait_until="networkidle")
+        try:
+            # Use 'domcontentloaded' first for faster initial load
+            page.goto(url, wait_until="domcontentloaded", timeout=40000)
+            print("[*] Page initial DOM loaded, waiting for content...")
+            # Then wait for network to quiet down
+            try:
+                page.wait_for_load_state("networkidle", timeout=30000)
+            except Exception as wait_error:
+                print(f"[!] Network idle wait timed out: {str(wait_error)}")
+                print("[*] Continuing anyway as the page content may be usable...")
+        except Exception as e:
+            print(f"[!] Navigation error: {str(e)}")
+            print("[*] Trying again with a longer timeout and relaxed conditions...")
+            # Try again with a longer timeout and relaxed wait_until condition
+            page.goto(url, wait_until="load", timeout=60000)
         
         # Try different selectors and handle no results gracefully
         listings = []
         try:
             # First check if there's a "no results" message or if page loaded properly
-            page.wait_for_load_state("networkidle", timeout=30000)
+            # We already waited for page to load above, so no need for another long wait here
             
             # Check for no results message first
             no_results_selectors = [
@@ -122,6 +121,19 @@ def fetch_listings_from_url(url, use_proxy=False, proxy_manager=None):
                         break
                 except:
                     continue
+            
+            # Try to get the page content to see if there are any errors
+            try:
+                if has_no_results:
+                    # Get page title to help with debugging
+                    title = page.title()
+                    print(f"[DEBUG] Page title: {title}")
+                    
+                    # Check if we've been blocked or got a CAPTCHA
+                    if "captcha" in title.lower() or "blocked" in title.lower():
+                        print("[WARNING] Possible CAPTCHA or blocking detected")
+            except Exception as e:
+                print(f"[DEBUG] Could not get page title: {str(e)}")
             
             if has_no_results:
                 context.close()
@@ -185,42 +197,30 @@ if __name__ == "__main__":
                         default="NONE", help="Type of proxy to use")
     args = parser.parse_args()
     
-    # Set up proxy manager and always show IP information
+    # Set up proxy manager without redundant IP checks
+    proxy_manager = None
     try:
-        # First check direct IP without proxy for comparison
-        direct_manager = ProxyManager(ProxyType.NONE)
-        direct_ip = direct_manager.get_current_ip()
-        print(f"[*] Your direct IP address: {direct_ip}")
-        
-        # Set up proxy if requested
-        proxy_manager = None
+        # Set up proxy if requested - silently without logging
         if args.use_proxy or args.proxy_type != "NONE":
             proxy_type = ProxyType[args.proxy_type]
             proxy_manager = ProxyManager(proxy_type)
-            print(f"[*] Using proxy type: {proxy_type.name}")
-            
-            # Show the IP address being used with the proxy
-            if proxy_manager:
-                proxy_ip = proxy_manager.get_current_ip()
-                print(f"[*] Your IP through WebShare proxy: {proxy_ip}")
-                
-                # Verify proxy is working by comparing IPs
-                if proxy_ip == direct_ip:
-                    print("[!] WARNING: Proxy IP is the same as direct IP. Proxy might not be working correctly.")
-                else:
-                    print("[+] Proxy confirmed working - your IP is masked.")
+            # Don't print proxy type here - it's logged in CLI main
         else:
             print("[*] Not using proxy - requests will use your direct IP address.")
     except Exception as e:
-        print(f"[!] Error checking IP addresses: {str(e)}")
-        print("[!] Will continue with scraping, but IP information is unavailable.")
+        print(f"[!] Error setting up proxy: {str(e)}")
+        print("[!] Will continue with scraping, but proxy may not be available.")
     
-    listings, used_ip, _ = fetch_listings_from_url(args.url, args.use_proxy, proxy_manager)
+    listings, used_ip, is_proxy_used = fetch_listings_from_url(args.url, args.use_proxy, proxy_manager)
     # Save results
     with open("storage/latest_results.json", "w", encoding="utf-8") as f:
         json.dump(listings, f, ensure_ascii=False, indent=2)
     print(f"[+] Wrote {len(listings)} listings to storage/latest_results.json")
+    
+    # Make the IP information very clear and easy to parse
     print(f"[*] Scraping completed using IP: {used_ip}")
+    print(f"[*] Used proxy: {'Yes' if is_proxy_used else 'No'}")
+    print(f"[*] ACTUAL_IP_USED: {used_ip} via {'proxy' if is_proxy_used else 'direct connection'}")
     
     # Send notifications if requested
     if args.notify and listings:

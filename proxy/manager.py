@@ -107,9 +107,10 @@ class ProxyManager:
             str: IP address or error message if retrieval failed
         """
         try:
+            # Increased timeout from 10 to 20 seconds
             response = requests.get("https://httpbin.org/ip", 
                                    proxies=self.get_request_proxies(), 
-                                   timeout=10)
+                                   timeout=20)
             
             if response.status_code == 200:
                 return response.json().get("origin", "Unknown")
