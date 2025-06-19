@@ -9,8 +9,9 @@ import sys
 import time
 import random
 from pathlib import Path
+from colorama import Fore, Style, Back
 
-from .utils import Services, check_listings_exist, with_tqdm, project_root
+from cli.utils import Services, check_listings_exist, progress_decorator, project_root
 
 
 def list_listings(
@@ -26,45 +27,73 @@ def list_listings(
         list_type: Type of listings to display ('latest', 'all', or 'new'), defaults to 'all'
         count: Maximum number of listings to display (0 = all)
     """
+    # Import colored output functions
+    from cli.utils import print_info, print_warning, print_error, print_success
+    from colorama import Fore, Style, Back
+    
     # Choose the appropriate file based on the list_type
     if list_type == "latest":
         file_path = services.get_path("latest_results")
-        file_description = "latest run"
+        file_description = f"{Fore.CYAN}latest run{Style.RESET_ALL}"
     elif list_type == "all":
         file_path = services.get_path("all_old")
-        file_description = "all stored"
+        file_description = f"{Fore.CYAN}all stored{Style.RESET_ALL}"
     elif list_type == "new":
         file_path = services.get_path("latest_new")
-        file_description = "new findings"
+        file_description = f"{Fore.GREEN}new findings{Style.RESET_ALL}"
     else:
-        print(f"[!] Invalid listing type: {list_type}")
+        print_warning(f"Invalid listing type: {list_type}")
         return
     
     try:
         listings = services.storage_service.get_all_cached_listings(file_path)
         
         if not listings:
-            print(f"[!] No listings found in {file_description}")
+            print_warning(f"No listings found in {file_description}")
             return
             
-        print(f"[*] Found {len(listings)} {file_description} listings:")
+        print_info(f"Found {len(listings)} {file_description} listings:")
+        print(f"{Back.BLUE}{Fore.WHITE} {'ID':<4} {'TITLE':<48} {'PRICE'} {'LOCATION'} {'POSTED'} {Style.RESET_ALL}")
         
         # Determine how many listings to display
         display_count = len(listings) if count == 0 else min(count, len(listings))
         
         # Display listings
         for i, listing in enumerate(listings[:display_count], 1):
-            title = listing.get("Title", "Unknown")[:50]
-            price = listing.get("Price", "Unknown")
-            location = listing.get("Location", "Unknown")
-            posted = listing.get("Posted", "Unknown")
-            print(f"[{i}] {title} | {price} | {location} | {posted}")
+            # Clean up the listing data
+            title = listing.get("Title", "Unknown").strip()
+            # Remove any line breaks from the title
+            title = title.replace("\n", " ").replace("\r", "")
+            # Truncate title if too long
+            if len(title) > 40:
+                title = title[:37] + "..."
+                
+            # Clean up price - remove any line breaks and take only first line if multiline
+            price_raw = listing.get("Price", "Unknown")
+            if isinstance(price_raw, str):
+                # Take only the first line if there are multiple lines
+                price = price_raw.split("\n")[0].strip()
+            else:
+                price = str(price_raw)
+            
+            # Clean up location data
+            location = listing.get("Location", "").strip() if "Location" in listing else ""
+            location = location.replace("\n", " ").replace("\r", "")
+            if len(location) > 20:
+                location = location[:17] + "..."
+                
+            posted = listing.get("Posted", "").strip() if listing.get("Posted") else ""
+            posted = posted.replace("\n", " ").replace("\r", "")
+            
+            # Add alternating row colors for better readability
+            bg_color = Back.BLACK if i % 2 == 0 else ""
+            print(f"{bg_color}{Fore.CYAN}[{i:<2}]{Style.RESET_ALL} {title:<48} {Fore.GREEN}{price}{Style.RESET_ALL} {Fore.YELLOW}{location}{Style.RESET_ALL} {posted}")
             
         if len(listings) > display_count:
-            print(f"[*] Showing {display_count} of {len(listings)} listings. Use --count option to show more.")
+            print_info(f"Showing {display_count} of {len(listings)} listings. Use --count option to show more.")
             
     except Exception as e:
-        print(f"[!] Error reading {file_description} listings: {e}")
+        print_error(f"Error reading {file_description} listings: {e}")
 
 
 def search_listings(
@@ -78,11 +107,17 @@ def search_listings(
         services: Services instance
         keyword: Search term to look for in listings
     """
+    # Import colored output functions
+    from cli.utils import print_info, print_warning, print_error, print_success
+    from colorama import Fore, Style
+    
     if not check_listings_exist(services):
         return
     
     # Use storage/all_old_results.json file by default
     all_old_path = services.get_path("all_old")
+    
+    print_info(f"Searching for '{keyword}' in listings...")
     
     listings = services.storage_service.get_listings_by_search_criteria(
         search_term=keyword,
@@ -90,13 +125,18 @@ def search_listings(
     )
     
     if listings:
-        print(f"[*] Found {len(listings)} matches for '{keyword}':")
+        print_success(f"Found {len(listings)} matches for '{keyword}':")
         for i, listing in enumerate(listings[:10], 1):  # Show only first 10 matches
             title = listing.get("Title", "Unknown")[:50]
             price = listing.get("Price", "Unknown")
-            print(f"[{i}] {title} | {price}")
+            location = listing.get("Location", "Unknown") if "Location" in listing else ""
+            
+            print(f"{Fore.CYAN}[{i}]{Style.RESET_ALL} {title} | {Fore.GREEN}{price}{Style.RESET_ALL} {Fore.YELLOW}{location}{Style.RESET_ALL}")
+        
+        if len(listings) > 10:
+            print_info(f"Showing 10 of {len(listings)} results. Use list command to see more.")
     else:
-        print(f"[!] No listings found matching '{keyword}'")
+        print_warning(f"No listings found matching '{keyword}'")
 
 
 def send_listing(
@@ -113,6 +153,10 @@ def send_listing(
     Returns:
         bool: True if successful, False otherwise
     """
+    # Import colored output functions
+    from cli.utils import print_info, print_warning, print_error, print_success
+    from colorama import Fore, Style
+    
     if not check_listings_exist(services):
         return False
     
@@ -122,16 +166,20 @@ def send_listing(
     
     if 1 <= listing_index <= len(listings):
         listing = listings[listing_index - 1]
+        title = listing.get("Title", "Unknown")[:30]
+        
+        print_info(f"Sending listing #{listing_index} to Telegram: '{title}...'")
+        
         success = services.notification_service.send_listing(listing)
         
         if success:
-            print(f"[+] Listing {listing_index} sent via Telegram")
+            print_success(f"Listing {listing_index} sent via Telegram")
             return True
         else:
-            print(f"[!] Failed to send listing {listing_index} via Telegram")
+            print_error(f"Failed to send listing {listing_index} via Telegram")
             return False
     else:
-        print(f"[!] Listing index {listing_index} not found. Use 'list' command to see available listings.")
+        print_warning(f"Listing index {listing_index} not found. Use 'list' command to see available listings.")
         return False
 
 
@@ -172,12 +220,12 @@ def send_listings_by_indexes(
     _send_listings_with_progress(services, valid_indexes, listings)
 
 
-@with_tqdm
+@progress_decorator
 def _send_listings_with_progress(
     services: Services, 
     indexes: List[int], 
     listings: List[Dict], 
-    tqdm_module=None
+    progress_bar=None
 ) -> None:
     """
     Internal function to send multiple listings with progress bar
@@ -186,37 +234,57 @@ def _send_listings_with_progress(
         services: Services instance
         indexes: List of integer indexes to send
         listings: List of all available listings
-        tqdm_module: tqdm module for progress bars
+        progress_bar: Progress bar function
     """
-    print(f"[*] Sending {len(indexes)} listings via Telegram...")
+    # Import colored output functions
+    from cli.utils import print_info, print_warning, print_error, print_success, print_progress_bar
+    from colorama import Fore, Style
+    
+    print_info(f"Sending {len(indexes)} listings via Telegram...")
     
     # Send each listing
     success_count = 0
+    failed_listings = []
+    total = len(indexes)
     
-    if tqdm_module:
-        indexes_iter = tqdm_module(indexes, desc="Sending to Telegram", unit="listing")
-    else:
-        indexes_iter = indexes
-    
-    for idx in indexes_iter:
+    # Use simpler iterator
+    for i, idx in enumerate(indexes, 1):
         listing = listings[idx-1]  # -1 because indexes are 1-based
+        title = listing.get("Title", "Unknown")[:30]
+        
+        # Show progress
+        print_progress_bar(
+            iteration=i-1, 
+            total=total,
+            prefix='', 
+            suffix=f'{i-1}/{total} {title}...',
+            length=30
+        )
+        # Add a newline to prevent output overlap
+        print()
+        
         success = services.notification_service.send_listing(listing)
         
         if success:
             success_count += 1
-            if not tqdm_module:
-                print(f"[+] Listing {idx} sent successfully")
+            print_success(f"Listing {idx} sent successfully")
         else:
-            if tqdm_module:
-                tqdm_module.write(f"[!] Failed to send listing {idx}")
-            else:
-                print(f"[!] Failed to send listing {idx}")
+            failed_listings.append(idx)
+            print_error(f"Failed to send listing {idx}")
                 
         # Add delay between messages
         if idx != indexes[-1]:  # If not the last message
             time.sleep(2)
     
-    print(f"[+] Sent {success_count}/{len(indexes)} listings successfully.")
+    # Complete the progress bar
+    print_progress_bar(total, total, prefix='Sending: ', suffix=f'({total}/{total}) Complete', length=30)
+    
+    if success_count == total:
+        print_success(f"All {success_count} listings sent successfully!")
+    else:
+        print_success(f"Sent {success_count}/{total} listings successfully.")
+        if failed_listings:
+            print_warning(f"Failed to send listings: {', '.join(map(str, failed_listings))}")
 
 
 def send_top_listings(
@@ -356,19 +424,19 @@ def run_scraper_with_url_improved(
     if isinstance(urls, str):
         urls = [urls]  # Convert single URL to list
         
-    # Use with_tqdm to handle progress bar
+    # Use our progress bar function
     return _run_scraper_with_urls_with_progress(
         services, urls, notify_new, notify_count
     )
 
 
-@with_tqdm
+@progress_decorator
 def _run_scraper_with_urls_with_progress(
     services: Services,
     urls: List[str],
     notify_new: bool = False,
     notify_count: int = 5,
-    tqdm_module=None
+    progress_bar=None
 ) -> bool:
     """
     Internal function to run scraper with progress bar support
@@ -378,26 +446,32 @@ def _run_scraper_with_urls_with_progress(
         urls: List of URLs to scrape
         notify_new: Whether to notify about new listings
         notify_count: Maximum number of listings to send notifications for
-        tqdm_module: The tqdm module if available
+        progress_bar: Function to display progress
         
     Returns:
         bool: True if successful, False otherwise
     """
+    # Import colored output functions and progress bar
+    from cli.utils import print_info, print_warning, print_error, print_success, print_progress_bar
+    from colorama import Fore, Style
+    
     all_listings = []
     new_listings = []
     success = False
     
-    # Process URLs with progress bar if multiple URLs
-    if tqdm_module and len(urls) > 1:
-        url_iter = tqdm_module(enumerate(urls, 1), total=len(urls), desc="Processing URLs", unit="url")
-    else:
-        url_iter = enumerate(urls, 1)
+    # Process URLs
+    url_iter = enumerate(urls, 1)
+    if len(urls) > 1:
+        print(f"{Fore.CYAN}Processing {len(urls)} URLs:{Style.RESET_ALL}")
     
     for i, url in url_iter:
-        if tqdm_module and len(urls) > 1:
-            tqdm_module.write(f"[*] Running scraper with URL {i}/{len(urls)}: {url}")
-        else:
-            print(f"[*] Running scraper with URL {i}/{len(urls)}: {url}")
+        print_info(f"Running scraper with URL {i}/{len(urls)}: {url}")
+        
+        # Show progress with our custom progress bar
+        if len(urls) > 1:
+            print_progress_bar(i-1, len(urls), prefix='', suffix=f'URL {i}/{len(urls)}', length=30)
+            # Add a newline to prevent overlap with debug output
+            print()
         
         # Create filters dictionary with custom_url
         filters = {"custom_url": url}
@@ -410,20 +484,12 @@ def _run_scraper_with_urls_with_progress(
         )
         
         if url_all_listings:
-            msg = f"[+] URL {i}/{len(urls)} complete! Found {len(url_all_listings)} listings ({len(url_new_listings)} new)."
-            if tqdm_module and len(urls) > 1:
-                tqdm_module.write(msg)
-            else:
-                print(msg)
+            print_success(f"URL {i}/{len(urls)} complete! Found {len(url_all_listings)} listings ({len(url_new_listings)} new).")
             all_listings.extend(url_all_listings)
             new_listings.extend(url_new_listings)
             success = True
         else:
-            msg = f"[!] URL {i}/{len(urls)} completed but no listings found."
-            if tqdm_module and len(urls) > 1:
-                tqdm_module.write(msg)
-            else:
-                print(msg)
+            print_warning(f"URL {i}/{len(urls)} completed but no listings found.")
     
     # Save combined listings to latest_results.json
     if all_listings:
@@ -525,14 +591,27 @@ def run_scheduler(
         services.scheduler_service.set_interval(interval)
         services.scheduler_service.start_scraping()
         
-        print(f"[*] Starting scheduled scraping with {len(urls)} URLs")
-        print(f"[*] Interval: {interval} seconds")
-        print(f"[*] Mode: {'Random' if random_selection else 'Sequential'} URL selection")
-        if runs > 0:
-            print(f"[*] Will perform up to {runs} runs")
+        # Import color utilities
+        from cli.utils import print_info
+        
+        print(f"\n{Back.BLUE}{Fore.WHITE} SCHEDULER STARTED {Style.RESET_ALL}")
+        print_info(f"Starting scheduled scraping with {len(urls)} URLs")
+        
+        minutes, seconds = divmod(interval, 60)
+        if minutes > 0:
+            interval_str = f"{minutes}m {seconds}s"
         else:
-            print(f"[*] Will run indefinitely until stopped")
-        print(f"[*] Press Ctrl+C to stop early")
+            interval_str = f"{seconds}s"
+        
+        print_info(f"Interval: {interval_str}")
+        print_info(f"Mode: {'Random' if random_selection else 'Sequential'} URL selection")
+        
+        if runs > 0:
+            print_info(f"Will perform up to {runs} runs")
+        else:
+            print_info(f"Will run indefinitely until stopped")
+            
+        print(f"{Fore.YELLOW}[!] Press Ctrl+C to stop early{Style.RESET_ALL}")
         
         runs_completed = 0
         # Initialize the random seed with current time for better randomness
@@ -542,7 +621,7 @@ def run_scheduler(
         while (runs == 0 or runs_completed < runs) and services.scheduler_service.is_scraping_active():
             if services.scheduler_service.is_time_to_scrape():
                 runs_remaining = "unlimited" if runs == 0 else str(runs)
-                print(f"\n[*] Run {runs_completed + 1}/{runs_remaining}")
+                print(f"\n{Fore.CYAN}[*] Run {runs_completed + 1}/{runs_remaining}{Style.RESET_ALL}")
                 
                 # Use scheduler service for URL selection
                 url_index = services.scheduler_service.select_next_url_index(
@@ -554,7 +633,7 @@ def run_scheduler(
                 run_urls = [selected_url]
                 
                 selection_mode = "Random" if random_selection else "Sequential"
-                print(f"[*] {selection_mode} URL selection: {selected_url} (index {url_index+1}/{len(urls)})")
+                print(f"{Fore.BLUE}[*] {selection_mode} URL selection:{Style.RESET_ALL} {selected_url} {Fore.YELLOW}(index {url_index+1}/{len(urls)}){Style.RESET_ALL}")
                 
                 success = run_scraper_with_url_improved(
                     services, 
@@ -570,7 +649,9 @@ def run_scheduler(
                     break
                     
                 next_run_in = services.scheduler_service.get_time_until_next_scrape()
-                print(f"[*] Next run in {int(next_run_in)} seconds")
+                minutes, seconds = divmod(int(next_run_in), 60)
+                time_str = f"{minutes}m {seconds}s" if minutes > 0 else f"{seconds}s"
+                print(f"{Fore.CYAN}[*] Next run in {time_str}{Style.RESET_ALL}")
                 
                 # Check for IP rotation if using WebShare proxy
                 if check_ip_rotation and services.scraper_service.use_proxy and services.scraper_service.proxy_type == "WEBSHARE_RESIDENTIAL":
@@ -578,9 +659,9 @@ def run_scheduler(
                     try:
                         proxy_manager = ProxyManager(ProxyType.WEBSHARE_RESIDENTIAL)
                         current_ip = proxy_manager.get_current_ip()
-                        print(f"[*] Current IP through WebShare proxy: {current_ip}")
+                        print(f"{Fore.MAGENTA}[*] Current IP through WebShare proxy: {current_ip}{Style.RESET_ALL}")
                     except Exception as e:
-                        print(f"[!] Error checking current IP: {str(e)}")
+                        print(f"{Fore.RED}[✗] Error checking current IP: {str(e)}{Style.RESET_ALL}")
             
             # Sleep for a short time to avoid CPU spinning
             time.sleep(1)

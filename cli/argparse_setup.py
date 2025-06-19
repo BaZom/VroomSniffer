@@ -5,6 +5,50 @@ Sets up argument parsing for the VroomSniffer CLI.
 """
 import argparse
 from typing import Dict, Any, Callable
+from colorama import Fore, Style, Back, init
+
+# Initialize colorama
+init(autoreset=True)
+
+
+class ColorHelpFormatter(argparse.RawDescriptionHelpFormatter):
+    """Custom argparse formatter that adds color to the help output"""
+    
+    def _format_action(self, action):
+        # Get the original format
+        result = super()._format_action(action)
+        
+        # Add color to the first line (command name and help)
+        lines = result.split('\n')
+        if len(lines) > 0:
+            # Find the position of help text in the line
+            cmd_line = lines[0]
+            help_pos = cmd_line.rfind('  ')
+            
+            if help_pos > 0 and help_pos < len(cmd_line) - 2:
+                # Colorize the command part
+                command_part = cmd_line[:help_pos]
+                help_part = cmd_line[help_pos:]
+                lines[0] = f"{Fore.CYAN}{command_part}{Style.RESET_ALL}{Fore.GREEN}{help_part}{Style.RESET_ALL}"
+        
+        # Join the lines back
+        return '\n'.join(lines)
+    
+    def _format_usage(self, usage, actions, groups, prefix):
+        result = super()._format_usage(usage, actions, groups, prefix)
+        
+        # Colorize the usage header
+        return result.replace('usage:', f'{Fore.YELLOW}usage:{Style.RESET_ALL}')
+
+    def add_text(self, text):
+        if text:
+            # Colorize section headings in text
+            if text.strip().endswith(':'):
+                text = f"{Fore.YELLOW}{text}{Style.RESET_ALL}"
+            elif text.strip() == 'EXAMPLES:':
+                text = f"\n{Back.BLUE}{Fore.WHITE} {text} {Style.RESET_ALL}"
+                
+        return super().add_text(text)
 
 
 def setup_parser() -> argparse.ArgumentParser:
@@ -15,18 +59,18 @@ def setup_parser() -> argparse.ArgumentParser:
         argparse.ArgumentParser: Configured parser
     """
     parser = argparse.ArgumentParser(
-        description="VroomSniffer Car Scraper CLI - Interact with JSON-based listing data",
-        epilog="""
-EXAMPLES:
+        description=f"{Fore.CYAN}VroomSniffer Car Scraper CLI - Interact with JSON-based listing data{Style.RESET_ALL}",
+        epilog=f"""
+{Back.BLUE}{Fore.WHITE} EXAMPLES: {Style.RESET_ALL}
   %(prog)s run "https://www.example-marketplace.com/s-autos/bmw/k0c216"
   %(prog)s list
   %(prog)s search "bmw x5"  
   %(prog)s send 3
 
-For more advanced features, use the Streamlit UI:
+{Fore.GREEN}For more advanced features, use the Streamlit UI:{Style.RESET_ALL}
   streamlit run ui/streamlit_app.py
         """,
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        formatter_class=ColorHelpFormatter
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
@@ -34,7 +78,8 @@ For more advanced features, use the Streamlit UI:
     list_parser = subparsers.add_parser(
         "list", 
         help="List latest scraped listings from JSON",
-        description="Display the most recent car listings from the last scraping run. Shows first 10 listings with title, price, and location."
+        description=f"{Fore.CYAN}Display the most recent car listings from the last scraping run. Shows first 10 listings with title, price, and location.{Style.RESET_ALL}",
+        formatter_class=ColorHelpFormatter
     )
     list_parser.add_argument(
         "--type",
@@ -53,7 +98,8 @@ For more advanced features, use the Streamlit UI:
     search_parser = subparsers.add_parser(
         "search", 
         help="Search listings by keyword",
-        description="Search through the latest listings for cars matching a keyword in the title."
+        description=f"{Fore.CYAN}Search through the latest listings for cars matching a keyword in the title.{Style.RESET_ALL}",
+        formatter_class=ColorHelpFormatter
     )
     search_parser.add_argument(
         "keyword", 
@@ -65,7 +111,8 @@ For more advanced features, use the Streamlit UI:
     send_parser = subparsers.add_parser(
         "send", 
         help="Send one or more listings via Telegram",
-        description="Send specific car listings via Telegram by their indexes. Use 'list' command first to see available indices."
+        description=f"{Fore.CYAN}Send specific car listings via Telegram by their indexes. Use 'list' command first to see available indices.{Style.RESET_ALL}",
+        formatter_class=ColorHelpFormatter
     )
     send_parser.add_argument(
         "indexes", 
@@ -74,13 +121,12 @@ For more advanced features, use the Streamlit UI:
         help="One or more indexes of listings to send (use 'list' command to see indices, starting from 1)"
     )
 
-    # Notify command removed - we now focus on individual notifications
-    
     # Run command
     run_parser = subparsers.add_parser(
         "run", 
         help="Run the scraper engine with one or more marketplace URLs",
-        description="Execute the car scraper with one or more marketplace search URLs. Results will be saved to storage/latest_results.json"
+        description=f"{Fore.CYAN}Execute the car scraper with one or more marketplace search URLs. Results will be saved to storage/latest_results.json{Style.RESET_ALL}",
+        formatter_class=ColorHelpFormatter
     )
     run_parser.add_argument(
         "urls", 
@@ -116,14 +162,16 @@ For more advanced features, use the Streamlit UI:
     version_parser = subparsers.add_parser(
         "version", 
         help="Show version information",
-        description="Display version and system information for the VroomSniffer car scraper."
+        description=f"{Fore.CYAN}Display version and system information for the VroomSniffer car scraper.{Style.RESET_ALL}",
+        formatter_class=ColorHelpFormatter
     )
 
     # Scheduler commands
     schedule_parser = subparsers.add_parser(
         "schedule",
         help="Schedule periodic scraping runs",
-        description="Set up automatic scraping at fixed intervals"
+        description=f"{Fore.CYAN}Set up automatic scraping at fixed intervals{Style.RESET_ALL}",
+        formatter_class=ColorHelpFormatter
     )
     schedule_parser.add_argument(
         "urls",
@@ -181,7 +229,8 @@ For more advanced features, use the Streamlit UI:
     diag_parser = subparsers.add_parser(
         "diagnostics", 
         help="Display diagnostic information",
-        description="Show various diagnostic information about the system, including IP tracking data."
+        description=f"{Fore.CYAN}Show various diagnostic information about the system, including IP tracking data.{Style.RESET_ALL}",
+        formatter_class=ColorHelpFormatter
     )
     diag_parser.add_argument(
         "--show-ip-tracking",

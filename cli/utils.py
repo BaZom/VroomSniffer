@@ -9,7 +9,10 @@ from pathlib import Path
 import sys
 import time
 from functools import wraps
-from tqdm import tqdm
+from colorama import Fore, Back, Style, init
+
+# Initialize colorama
+init(autoreset=True)
 
 # Add the parent directory to the path so we can import from project modules
 project_root = Path(__file__).parent.parent
@@ -84,7 +87,7 @@ def check_listings_exist(services: Services, file_path: Optional[str] = None) ->
         
     listings = services.storage_service.get_all_cached_listings(file_path)
     if not listings:
-        print("[!] No listings found. Run 'python cli/main.py run <url>' first.")
+        print_warning("No listings found. Run 'python cli/main.py run <url>' first.")
         return False
     return True
 
@@ -124,22 +127,67 @@ def load_saved_urls(services: Services) -> List[str]:
         return []
 
 
-def with_tqdm(func: Callable) -> Callable:
+def progress_decorator(func: Callable) -> Callable:
     """
-    Decorator to handle tqdm availability for progress bars.
+    Simple decorator for progress monitoring functions.
+    Instead of using tqdm, we now just pass through to our custom progress bar.
     
     Args:
         func: Function to decorate
         
     Returns:
-        Wrapped function that handles tqdm
+        Original function, but ensures progress_bar is available in kwargs
     """
     @wraps(func)
     def wrapper(*args, **kwargs):
-        try:
-            kwargs['tqdm_module'] = tqdm
-        except NameError:
-            kwargs['tqdm_module'] = None
-            print("[!] tqdm package not found. Install it for progress bars: pip install tqdm")
+        # We'll use our custom print_progress_bar instead of tqdm
+        kwargs['progress_bar'] = print_progress_bar
         return func(*args, **kwargs)
     return wrapper
+
+# Color printing functions
+def print_success(message):
+    """Print a success message in green."""
+    print(f"{Fore.GREEN}[+] {message}{Style.RESET_ALL}")
+
+def print_info(message):
+    """Print an info message in blue."""
+    print(f"{Fore.BLUE}[*] {message}{Style.RESET_ALL}")
+
+def print_warning(message):
+    """Print a warning message in yellow."""
+    print(f"{Fore.YELLOW}[!] {message}{Style.RESET_ALL}")
+
+def print_error(message):
+    """Print an error message in red."""
+    print(f"{Fore.RED}[✗] {message}{Style.RESET_ALL}")
+    
+def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=30, fill='█'):
+    """
+    Call in a loop to create a progress bar in the console.
+    
+    Args:
+        iteration: Current iteration
+        total: Total iterations
+        prefix: Prefix string
+        suffix: Suffix string
+        decimals: Number of decimals in percent
+        length: Character length of bar
+        fill: Bar fill character
+    """
+    if total == 0:
+        total = 1  # Avoid division by zero
+        
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filled_length = int(length * iteration // total)
+    bar = fill * filled_length + '-' * (length - filled_length)
+    
+    # Use cyan color for the progress bar
+    bar_colored = f"{Fore.CYAN}{bar}{Style.RESET_ALL}"
+    percent_colored = f"{Fore.YELLOW}{percent}%{Style.RESET_ALL}"
+    
+    print(f'\r{prefix}{bar_colored} {percent_colored} {suffix}', end='')
+    
+    # New line when complete
+    if iteration == total: 
+        print()

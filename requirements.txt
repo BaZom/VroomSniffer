@@ -3,7 +3,7 @@ requests>=2.30.0
 python-dotenv>=1.0.0
 streamlit>=1.25.0
 pandas>=2.0.0
-tqdm>=4.65.0
+colorama>=0.4.6  # For colored terminal output
 
 # Telegram support (uses basic requests, no additional library needed)
 # Optional: python-telegram-bot (for advanced Telegram features)
