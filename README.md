@@ -162,7 +162,7 @@ The Streamlit dashboard provides an interactive interface for monitoring and man
 #### Starting the UI
 
 ```bash
-streamlit run ui/pages/scraper.py
+streamlit run ui/streamlit_app.py
 ```
 
 #### Key UI Features
