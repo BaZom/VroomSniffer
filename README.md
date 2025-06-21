@@ -47,7 +47,6 @@ A modern, service-oriented web scraping system designed to collect car listings 
 git clone https://github.com/BaZom/VroomSniffer.git
 cd VroomSniffer
 ```
-
 **Create virtual environment:**
 ```bash
 # Windows
