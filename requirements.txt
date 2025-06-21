@@ -1,9 +1,14 @@
-playwright
-requests
-python-dotenv
-streamlit
-pandas
+playwright>=1.35.0
+requests>=2.30.0
+python-dotenv>=1.0.0
+streamlit>=1.25.0
+pandas>=2.0.0
+colorama>=0.4.6  # For colored terminal output
 
 # Telegram support (uses basic requests, no additional library needed)
 # Optional: python-telegram-bot (for advanced Telegram features)
-# python-telegram-bot
+# python-telegram-bot>=13.0.0
+
+# Type checking support
+typing-extensions>=4.5.0
+mypy>=1.0.0; python_version >= "3.7"  # Optional for static type checking
