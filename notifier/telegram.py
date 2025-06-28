@@ -1,8 +1,6 @@
 # Telegram Notifier
 # -----------------
 # Sends messages using Telegram Bot API.
-# You need to create a bot via @BotFather and get your bot token.
-# Also need your chat ID where messages will be sent.
 
 import requests
 import os
