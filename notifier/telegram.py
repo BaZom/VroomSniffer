@@ -58,11 +58,13 @@ def send_telegram_message(text, parse_mode=None):
         except Exception:
             result = response.text
         if response.status_code != 200:
-            return False, str(result)
+            # Return the actual result (dict) for proper error handling
+            return False, result
         if isinstance(result, dict) and result.get('ok'):
             return True, None
         else:
-            return False, str(result)
+            # Return the actual result (dict) for proper error handling
+            return False, result
     except requests.exceptions.RequestException as e:
         return False, str(e)
     except Exception as e:

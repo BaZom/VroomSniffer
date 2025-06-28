@@ -68,15 +68,32 @@ class NotificationService:
                     should_retry = False
                     
                     # Check if it's a network error
-                    if ("ConnectionResetError" in error or "Connection aborted" in error) and retry_on_network_error:
+                    if isinstance(error, str) and ("ConnectionResetError" in error or "Connection aborted" in error) and retry_on_network_error:
                         should_retry = True
                     
-                    # Check if it's a rate limit error
+                    # Check if it's a rate limit error (dict format)
                     elif isinstance(error, dict) and error.get("error_code") == 429:
                         retry_after = error.get("parameters", {}).get("retry_after", 30)
                         retry_wait = retry_after + 2  # Add a buffer
                         should_retry = True
                         print(f"[*] Hit Telegram rate limit. Waiting {retry_wait} seconds before retry...")
+                    
+                    # Check if it's a rate limit error (string format - fallback)
+                    elif isinstance(error, str) and "Too Many Requests" in error and "retry after" in error:
+                        # Try to extract retry_after from string
+                        try:
+                            import re
+                            match = re.search(r"retry after (\d+)", error)
+                            if match:
+                                retry_after = int(match.group(1))
+                                retry_wait = retry_after + 2
+                                should_retry = True
+                                print(f"[*] Hit Telegram rate limit (string). Waiting {retry_wait} seconds before retry...")
+                        except:
+                            # Fallback to default wait time
+                            retry_wait = 30
+                            should_retry = True
+                            print(f"[*] Hit Telegram rate limit. Waiting {retry_wait} seconds before retry...")
                     
                     # Perform retry if needed
                     if should_retry:

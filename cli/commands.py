@@ -242,49 +242,30 @@ def _send_listings_with_progress(
     
     print_info(f"Sending {len(indexes)} listings via Telegram...")
     
-    # Send each listing
-    success_count = 0
-    failed_listings = []
+    # Get the listings to send
+    listings_to_send = [listings[idx-1] for idx in indexes]  # -1 because indexes are 1-based
+    
+    # Use the notification service's proper batch sending method
+    success_count, failed_list = services.notification_service.manual_send_listings(
+        listings_to_send,
+        parse_mode="HTML",
+        retry_on_network_error=True
+    )
+    
+    # Show results
     total = len(indexes)
-    
-    # Use simpler iterator
-    for i, idx in enumerate(indexes, 1):
-        listing = listings[idx-1]  # -1 because indexes are 1-based
-        title = listing.get("Title", "Unknown")[:30]
-        
-        # Show progress
-        print_progress_bar(
-            iteration=i-1, 
-            total=total,
-            prefix='', 
-            suffix=f'{i-1}/{total} {title}...',
-            length=30
-        )
-        # Add a newline to prevent output overlap
-        print()
-        
-        success = services.notification_service.send_listing(listing)
-        
-        if success:
-            success_count += 1
-            print_success(f"Listing {idx} sent successfully")
-        else:
-            failed_listings.append(idx)
-            print_error(f"Failed to send listing {idx}")
-                
-        # Add delay between messages
-        if idx != indexes[-1]:  # If not the last message
-            time.sleep(2)
-    
-    # Complete the progress bar
-    print_progress_bar(total, total, prefix='Sending: ', suffix=f'({total}/{total}) Complete', length=30)
-    
     if success_count == total:
         print_success(f"All {success_count} listings sent successfully!")
     else:
         print_success(f"Sent {success_count}/{total} listings successfully.")
-        if failed_listings:
-            print_warning(f"Failed to send listings: {', '.join(map(str, failed_listings))}")
+        if failed_list:
+            print_warning(f"Failed to send {len(failed_list)} listings:")
+            for failed_item in failed_list:
+                # Map back to original index
+                original_index = indexes[failed_item['index'] - 1]
+                title = failed_item.get('title', 'Unknown')[:50]
+                error = failed_item.get('error', 'Unknown error')
+                print_error(f"  Listing {original_index}: {title} - Error: {error}")
 
 
 def send_top_listings(

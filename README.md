@@ -78,7 +78,7 @@ python cli/main.py list
 
 **Launch web interface:**
 ```bash
-streamlit run ui/pages/scraper.py
+streamlit run ui/streamlit_app.py
 ```
 
 ## Configuration
