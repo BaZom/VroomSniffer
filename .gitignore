@@ -7,6 +7,9 @@ __pycache__/
 *.pyc
 *.pyo
 
+# Test artifacts
+scraper/tests/bandwidth_test_results.json
+
 # Environment variables
 .env.local
 

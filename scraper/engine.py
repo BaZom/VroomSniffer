@@ -9,14 +9,18 @@ import argparse
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlparse
+from typing import List, Tuple, Optional
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
 
 from notifier.telegram import send_telegram_message, format_car_listing_message
 from proxy.manager import ProxyManager, ProxyType
+from scraper.utils import ResourceBlocker, AntiDetection, PageNavigator, ListingsFinder
 
 def parse_listing(item, base_url=""):
+    """Parse a single listing element into a structured format"""
     try:
         title = item.query_selector(".text-module-begin").inner_text().strip()
         price = item.query_selector(".aditem-main--middle--price-shipping").inner_text().strip()
@@ -45,147 +49,100 @@ def parse_listing(item, base_url=""):
         print(f"[!] Error parsing listing: {e}")
         return None
 
-def fetch_listings_from_url(url, use_proxy=False, proxy_manager=None):
-    from urllib.parse import urlparse
-    from proxy.manager import ProxyManager, ProxyType
+
+def fetch_listings_from_url(url: str, use_proxy: bool = False, proxy_manager: Optional[ProxyManager] = None) -> Tuple[List[dict], str, bool]:
+    """
+    Fetch car listings from a marketplace URL with bandwidth optimization.
     
+    Args:
+        url: The marketplace URL to scrape
+        use_proxy: Whether to use proxy
+        proxy_manager: Optional proxy manager instance
+    
+    Returns:
+        Tuple of (listings, ip_address, proxy_used)
+    """
     # Extract base URL for dynamic URL construction
     parsed_url = urlparse(url)
     base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
     
-    # Get proxy manager if needed
+    # Setup proxy if needed
+    current_ip = "Unknown"
     if use_proxy and proxy_manager is None:
+        print(f"[DEBUG] Creating proxy manager from environment...")
         proxy_manager = ProxyManager.create_from_environment()
+        print(f"[DEBUG] Created proxy manager with type: {proxy_manager.proxy_type.name}")
+    elif not use_proxy:
+        print(f"[DEBUG] Proxy not requested (use_proxy=False)")
+    else:
+        print(f"[DEBUG] Proxy manager already provided")
     
-    # Initialize the IP address variable - we don't check it here anymore
-    # since it was already checked in the main function to avoid duplication
-    current_ip = "Unknown" if proxy_manager is None else proxy_manager.get_current_ip()
+    if proxy_manager:
+        current_ip = proxy_manager.get_current_ip()
+        print(f"[*] Proxy type: {proxy_manager.proxy_type.name}")
+        print(f"[*] Detected IP: {current_ip}")
+    
+    # Initialize resource blocker for bandwidth optimization
+    resource_blocker = ResourceBlocker()
     
     with sync_playwright() as p:
+        # Configure browser with proxy if needed
         browser_options = {}
-        
-        # Configure proxy if WebShare residential proxy is enabled
         if use_proxy and proxy_manager and proxy_manager.proxy_type == ProxyType.WEBSHARE_RESIDENTIAL:
             proxy_config = proxy_manager.get_playwright_proxy()
             if proxy_config:
                 browser_options["proxy"] = proxy_config
                 print(f"[*] Using WebShare residential proxy")
         
+        # Launch browser with anti-detection
         browser = p.chromium.launch(headless=True, **browser_options)
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            user_agent=AntiDetection.get_random_user_agent(),
+            viewport={"width": 1920, "height": 1080}
         )
         page = context.new_page()
         
-        # Skip duplicate IP check as we already did this in the main script
-        # This avoids redundant output and speeds up the scraping process
-            
-        print(f"[*] Navigating to marketplace search page: {url}")
-        try:
-            # Use 'domcontentloaded' first for faster initial load
-            page.goto(url, wait_until="domcontentloaded", timeout=40000)
-            print("[*] Page initial DOM loaded, waiting for content...")
-            # Then wait for network to quiet down
-            try:
-                page.wait_for_load_state("networkidle", timeout=30000)
-            except Exception as wait_error:
-                print(f"[!] Network idle wait timed out: {str(wait_error)}")
-                print("[*] Continuing anyway as the page content may be usable...")
-        except Exception as e:
-            print(f"[!] Navigation error: {str(e)}")
-            print("[*] Trying again with a longer timeout and relaxed conditions...")
-            # Try again with a longer timeout and relaxed wait_until condition
-            page.goto(url, wait_until="load", timeout=60000)
+        # Setup bandwidth optimization
+        page.route("**/*", resource_blocker.create_handler())
         
-        # Try different selectors and handle no results gracefully
-        listings = []
         try:
-            # First check if there's a "no results" message or if page loaded properly
-            # We already waited for page to load above, so no need for another long wait here
+            # Navigate with anti-detection delay
+            AntiDetection.add_human_delay()
             
-            # Check for no results message first
-            no_results_selectors = [
-                "text=Keine Anzeigen gefunden",
-                "text=Es wurden keine Anzeigen gefunden", 
-                ".messagebox--alert",
-                ".search-results-error",
-                "[data-testid='no-results']"
-            ]
-            
-            has_no_results = False
-            for selector in no_results_selectors:
-                try:
-                    if page.locator(selector).is_visible(timeout=2000):
-                        print(f"[!] No results found for this search")
-                        has_no_results = True
-                        break
-                except:
-                    continue
-            
-            # Try to get the page content to see if there are any errors
-            try:
-                if has_no_results:
-                    # Get page title to help with debugging
-                    title = page.title()
-                    print(f"[DEBUG] Page title: {title}")
-                    
-                    # Check if we've been blocked or got a CAPTCHA
-                    if "captcha" in title.lower() or "blocked" in title.lower():
-                        print("[WARNING] Possible CAPTCHA or blocking detected")
-            except Exception as e:
-                print(f"[DEBUG] Could not get page title: {str(e)}")
-            
-            if has_no_results:
-                context.close()
-                browser.close()
+            # Navigate to page
+            navigator = PageNavigator(page)
+            if not navigator.navigate_to_url(url):
                 return [], current_ip, (use_proxy and proxy_manager and proxy_manager.proxy_type == ProxyType.WEBSHARE_RESIDENTIAL)
             
-            # Wait for listings to load but with shorter timeout
-            try:
-                page.wait_for_selector(".aditem", timeout=15000)
-                listings = page.query_selector_all(".aditem")
-            except:
-                # If .aditem not found, try alternative selectors
-                alternative_selectors = [".ad-listitem", ".aditem-main", ".adlist .aditem"]
-                for selector in alternative_selectors:
-                    try:
-                        page.wait_for_selector(selector, timeout=5000)
-                        listings = page.query_selector_all(selector)
-                        if listings:
-                            break
-                    except:
-                        continue
+            # Check for no results
+            if navigator.check_for_no_results():
+                return [], current_ip, (use_proxy and proxy_manager and proxy_manager.proxy_type == ProxyType.WEBSHARE_RESIDENTIAL)
             
-            print(f"[*] Found {len(listings)} listings")
+            # Debug page content if needed
+            navigator.debug_page_content()
+            
+            # Find listings
+            listings_finder = ListingsFinder(page)
+            listings = listings_finder.find_listings()
+            
+            # Parse listings
+            parsed_listings = []
+            if listings:
+                for item in listings:
+                    parsed_listing = parse_listing(item, base_url)
+                    if parsed_listing:
+                        parsed_listings.append(parsed_listing)
         
-        except Exception as e:
-            print(f"[!] No listings found with .aditem selector, trying alternatives...")
-            # Try alternative selectors
-            alternative_selectors = [
-                "[data-testid='result-item']",
-                ".ad-listitem",
-                ".aditem-main",
-                ".result-item"
-            ]
-            
-            for selector in alternative_selectors:
-                try:
-                    page.wait_for_selector(selector, timeout=10000)
-                    listings = page.query_selector_all(selector)
-                    if listings:
-                        print(f"[*] Found {len(listings)} listings with selector: {selector}")
-                        break
-                except:
-                    continue
-            
-            if not listings:
-                print("[!] No listings found with any selector - possibly no results for this search")
-        
-        parsed = [parse_listing(item, base_url) for item in listings] if listings else []
-        context.close()
-        browser.close()
+        finally:
+            context.close()
+            browser.close()
     
-    return [l for l in parsed if l], current_ip, (use_proxy and proxy_manager and proxy_manager.proxy_type == ProxyType.WEBSHARE_RESIDENTIAL)
+    # Print bandwidth optimization statistics
+    print(f"[*] Navigation and scraping completed")
+    resource_blocker.print_statistics()
+    
+    return parsed_listings, current_ip, (use_proxy and proxy_manager and proxy_manager.proxy_type == ProxyType.WEBSHARE_RESIDENTIAL)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -197,14 +154,19 @@ if __name__ == "__main__":
                         default="NONE", help="Type of proxy to use")
     args = parser.parse_args()
     
+    # Always use high bandwidth optimization (0.45MB/session)
+    print(f"[*] Bandwidth optimization: ACTIVE - blocking images, fonts, and tracking")
+    
     # Set up proxy manager without redundant IP checks
     proxy_manager = None
     try:
         # Set up proxy if requested - silently without logging
-        if args.use_proxy or args.proxy_type != "NONE":
+        if args.use_proxy:
+            proxy_manager = ProxyManager.create_from_environment()
+            print(f"[*] Using proxy from environment: {proxy_manager.proxy_type.name}")
+        elif args.proxy_type != "NONE":
             proxy_type = ProxyType[args.proxy_type]
             proxy_manager = ProxyManager(proxy_type)
-            # Don't print proxy type here - it's logged in CLI main
         else:
             print("[*] Not using proxy - requests will use your direct IP address.")
     except Exception as e:
