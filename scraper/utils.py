@@ -7,29 +7,163 @@ import time
 from typing import Dict, List, Tuple, Any
 from playwright.sync_api import Page, BrowserContext, Route, Request
 
-# Block ad/tracking domains AND images for maximum bandwidth savings
-BLOCKED_RESOURCE_TYPES = ['image', 'font']  # Block images and fonts (CSS needed for functionality)
+# ULTRA-AGGRESSIVE blocking for maximum bandwidth savings (target: minimal KB)
+BLOCKED_RESOURCE_TYPES = [
+    'stylesheet',   # Block ALL CSS files (the 440 KB CSS file must be blocked!)
+    'image',        # Block all images (biggest bandwidth saver)
+    'font',         # Block fonts 
+    'media',        # Block video/audio files
+    'script',       # Block ALL JavaScript
+    'websocket',    # Block websocket connections
+    'eventsource',  # Block server-sent events
+    'texttrack',    # Block subtitle tracks
+    'manifest',     # Block web app manifests
+    'other',        # Block miscellaneous resources
+]
+
+# Essential CSS to ALLOW (minimal whitelist) - BLOCK ALL CSS for maximum bandwidth savings
+ESSENTIAL_RESOURCES = [
+    # Block ALL CSS - we only need HTML content for scraping
+    # 'kleinanzeigen.de/static/css/all.css',  # DISABLED - this is 440 KB!
+]
+
+# ULTRA-AGGRESSIVE URL blocking 
 BLOCKED_URL_KEYWORDS = [
-    # Google ads and analytics
+    # Google ads and analytics (AGGRESSIVE BLOCKING)
     'doubleclick.net', 'googlesyndication', 'adservice.google', 'google-analytics', 'googletagmanager',
-    'google.com/g/collect', 'sgtm-legacy', 'gtm=', 'tid=G-',
+    'google.com/g/collect', 'sgtm-legacy', 'gtm=', 'tid=G-', 'googleadservices.com', 'googletag',
     # Social media tracking
-    'facebook.net', 'facebook.com', 'connect.facebook.net',
-    # Ad networks
-    'ads.', 'tracking', 'pixel', 'adnxs.com', 'amazon-adsystem.com',
+    'facebook.net', 'facebook.com', 'connect.facebook.net', 'twitter.com', 'instagram.com',
+    # Ad networks (EXTENSIVE BLOCKING)
+    'ads.', 'tracking', 'pixel', 'adnxs.com', 'amazon-adsystem.com', 'adsystem.amazon',
     'criteo.com', 'outbrain.com', 'taboola.com', 'adform.net', 'rubiconproject.com', 'pubmatic.com',
     'openx.net', 'bidswitch.net', 'mathtag.com', 'scorecardresearch.com', 'moatads.com', 'casalemedia.com',
     'adition.com', 'bidr.io', 'adscale.de', 'adspirit.de', 'adserver', 'adclick', 'banner', 'promo',
-    # eBay Kleinanzeigen specific tracking and ads
-    'trackjs.com', 'speedcurve.com', 'hotjar.com', 'cdn-cgi',
+    # eBay Kleinanzeigen specific tracking and ads (ENHANCED)
+    'trackjs.com', 'speedcurve.com', 'hotjar.com', 'cdn-cgi', 'mouseflow', 'amplitude',
     'cloudflareinsights.com', 'cdn.jsdelivr.net/npm/hotjar', 'cdn.segment.com', 'cdn.optimizely.com',
     'cdn.mouseflow.com', 'cdn.amplitude.com', 'cdn.plausible.io', 'cdn.matomo.cloud', 'cdn.datadoghq.com',
     # eBay Kleinanzeigen ad-block detection and tracking scripts
-    'adblock-detection', 'ads.obj', 'prebid', 'gdpr/api/consent',
-    # Analytics and data collection
-    'collect?v=2', 'server.sgtm', 'tracking/', 'analytics'
+    'adblock-detection', 'ads.obj', 'prebid', 'gdpr/api/consent', 'liberty-js', 'liberty-experimental',
+    # Analytics and data collection (EXTENSIVE)
+    'collect?v=2', 'server.sgtm', 'tracking/', 'analytics', 'telemetry', 'metrics',
+    # Video/Media (BANDWIDTH HEAVY)
+    'youtube.com/embed', 'vimeo.com', 'youtu.be', 'video', 'mp4', 'webm', 'avi',
+    # CDN assets that aren't essential (AGGRESSIVE)
+    'cdnjs.cloudflare.com', 'unpkg.com', 'jsdelivr.net', 'bootstrapcdn.com',
+    # Chat/Support widgets (NON-ESSENTIAL)
+    'chat', 'support', 'intercom', 'zendesk', 'freshchat', 'tawk.to',
+    # Marketing/Analytics tools (AGGRESSIVE BLOCKING)
+    'segment.com', 'mixpanel.com', 'heap.com', 'fullstory.com', 'logrocket.com',
 ]
 
+
+class BandwidthTracker:
+    """Track actual bandwidth usage during scraping"""
+    
+    def __init__(self):
+        self.total_bytes = 0
+        self.request_count = 0
+        self.blocked_count = 0
+        self.request_details = []
+        
+    def record_allowed_request(self, resource_type: str, url: str, actual_size: int = None):
+        """Record an allowed request with actual measured bandwidth"""
+        if actual_size is not None:
+            # Use actual measured size
+            size_bytes = actual_size
+        else:
+            # No fallback estimates needed - we measure everything via response listener  
+            # This will be updated with real size when response arrives
+            size_bytes = 0  # Placeholder, will be updated with actual size
+            
+        self.total_bytes += size_bytes
+        self.request_count += 1
+        
+        # Store details for debugging and size updates
+        self.request_details.append({
+            'type': resource_type,
+            'size': size_bytes,
+            'url': url,  # Store full URL for accurate matching
+            'display_url': url[:50] + '...' if len(url) > 50 else url,
+            'measured': actual_size is not None
+        })
+        
+    def record_blocked_request(self):
+        """Record a blocked request"""
+        self.blocked_count += 1
+        
+    def get_bandwidth_summary(self) -> dict:
+        """Get bandwidth usage summary"""
+        total_kb = round(self.total_bytes / 1024, 2)
+        total_mb = round(self.total_bytes / (1024 * 1024), 3)
+        
+        return {
+            'total_bytes': self.total_bytes,
+            'total_kb': total_kb,
+            'total_mb': total_mb,
+            'requests_allowed': self.request_count,
+            'requests_blocked': self.blocked_count
+        }
+        
+    def print_bandwidth_report(self):
+        """Print a clean bandwidth usage report"""
+        summary = self.get_bandwidth_summary()
+        total_requests = summary['requests_allowed'] + summary['requests_blocked']
+        
+        if total_requests > 0:
+            blocked_percentage = (summary['requests_blocked'] / total_requests) * 100
+        else:
+            blocked_percentage = 0
+            
+        print(f"\n💰 BANDWIDTH USAGE SUMMARY:")
+        print(f"   📊 Data transferred: {summary['total_kb']} KB ({summary['total_mb']} MB)")
+        print(f"   📈 Requests: {summary['requests_allowed']} allowed, {summary['requests_blocked']} blocked")
+        print(f"   ⚡ Efficiency: {blocked_percentage:.1f}% of requests blocked")
+        
+        # Show breakdown of request details
+        if self.request_details:
+            print(f"\n📋 Request Details:")
+            for detail in self.request_details:
+                size_display = f"{detail['size']} bytes" if detail['size'] > 0 else "measuring..."
+                display_url = detail.get('display_url', detail['url'][:50] + '...' if len(detail['url']) > 50 else detail['url'])
+                print(f"   {detail['type']}: {size_display} - {display_url}")
+    
+    def update_request_size(self, url: str, actual_size: int):
+        """Update a previously recorded request with actual measured size"""
+        try:
+            # Find the most recent request detail that matches this URL (handle redirects)
+            for detail in reversed(self.request_details):  # Check from most recent
+                if detail['url'] == url:  # Exact match first
+                    self._update_detail_size(detail, actual_size)
+                    break
+                # Handle redirects: check if this could be a redirect from the recorded URL
+                elif self._is_likely_redirect(detail['url'], url):
+                    self._update_detail_size(detail, actual_size)
+                    break
+        except Exception:
+            # Silently handle errors
+            pass
+    
+    def _update_detail_size(self, detail: dict, actual_size: int):
+        """Helper to update a request detail with new size"""
+        old_size = detail['size']
+        detail['size'] = actual_size
+        detail['measured'] = True
+        
+        # Update total bytes
+        self.total_bytes = self.total_bytes - old_size + actual_size
+        
+    def _is_likely_redirect(self, original_url: str, response_url: str) -> bool:
+        """Check if response_url is likely a redirect from original_url"""
+        try:
+            # Handle common redirect patterns
+            if 'ebay-kleinanzeigen.de' in original_url and 'kleinanzeigen.de' in response_url:
+                return True
+            # Add more redirect patterns as needed
+            return False
+        except Exception:
+            return False
 
 class ResourceBlocker:
     """Handles resource blocking for bandwidth optimization"""
@@ -38,6 +172,7 @@ class ResourceBlocker:
         self.resource_stats = {}
         self.blocked_count = 0
         self.allowed_count = 0
+        self.bandwidth_tracker = BandwidthTracker()
     
     def create_handler(self):
         """Create a request handler for Playwright route interception"""
@@ -61,26 +196,44 @@ class ResourceBlocker:
             if should_block:
                 self.resource_stats[resource_type]['blocked'] += 1
                 self.blocked_count += 1
+                self.bandwidth_tracker.record_blocked_request()
                 route.abort()
             else:
                 self.allowed_count += 1
+                # Record with initial estimate - will be updated with actual size via response listener
+                self.bandwidth_tracker.record_allowed_request(resource_type, url, None)
                 route.continue_()
         
         return handle_request
     
     def _should_block_resource(self, resource_type: str, url: str) -> bool:
-        """Determine if a resource should be blocked"""
-        # Block by resource type
+        """Determine if a resource should be blocked - ULTRA-AGGRESSIVE APPROACH"""
+        
+        # STEP 1: Block all resources in the blocked types list
         if resource_type in BLOCKED_RESOURCE_TYPES:
             return True
         
-        # Block by URL keywords
+        # STEP 2: For scripts and stylesheets, use WHITELIST approach (block everything except essentials)
+        if resource_type in ['script', 'stylesheet']:
+            # Check if this is an essential resource we need to keep
+            for essential in ESSENTIAL_RESOURCES:
+                if essential in url:
+                    return False  # Allow essential resources
+            # Block ALL other scripts and stylesheets
+            return True
+        
+        # STEP 3: Block by URL keywords (tracking, ads, etc.)
         url_lower = url.lower()
         for keyword in BLOCKED_URL_KEYWORDS:
             if keyword in url_lower:
                 return True
         
-        return False
+        # STEP 4: Allow only document and essential XHR requests
+        if resource_type in ['document', 'xhr', 'fetch']:
+            return False
+        
+        # STEP 5: Block everything else by default (aggressive approach)
+        return True
     
     def print_statistics(self):
         """Print detailed resource blocking statistics"""
@@ -99,6 +252,7 @@ class ResourceBlocker:
                 print(f"      Example: {example}")
         
         self._print_optimization_opportunities()
+        self.bandwidth_tracker.print_bandwidth_report()
     
     def _print_optimization_opportunities(self):
         """Print bandwidth optimization opportunities"""

@@ -111,11 +111,14 @@ class ScraperService:
                     print(f"[WARNING] Scraper completed but no results file found")
                     listings_data = []
                 
-                # Extract the actual IP used from the scraper output
+                # Extract the actual IP used and bandwidth info from the scraper output
                 actual_ip = None
                 is_proxy = False
+                bandwidth_kb = None
+                requests_allowed = None
+                requests_blocked = None
                 
-                # Look for the actual IP and proxy status in the scraper's output
+                # Look for the actual IP, proxy status, and bandwidth info in the scraper's output
                 output_lines = result.stdout.split("\n")
                 for line in output_lines:
                     if "[*] Scraping completed using IP:" in line:
@@ -125,10 +128,41 @@ class ScraperService:
                     elif "[*] Used proxy:" in line:
                         if "Yes" in line:
                             is_proxy = True
+                    elif "📊 Data transferred:" in line:
+                        # Extract bandwidth info: "📊 Data transferred: 68.36 KB (0.067 MB)"
+                        try:
+                            parts = line.split(":")
+                            if len(parts) > 1:
+                                bandwidth_part = parts[1].strip()
+                                if "KB" in bandwidth_part:
+                                    bandwidth_kb = float(bandwidth_part.split("KB")[0].strip())
+                        except:
+                            pass
+                    elif "📈 Requests:" in line:
+                        # Extract request info: "📈 Requests: 2 allowed, 56 blocked"
+                        try:
+                            parts = line.split(":")
+                            if len(parts) > 1:
+                                requests_part = parts[1].strip()
+                                if "allowed" in requests_part and "blocked" in requests_part:
+                                    allowed_part = requests_part.split("allowed")[0].strip()
+                                    blocked_part = requests_part.split("blocked")[0].split(",")[-1].strip()
+                                    requests_allowed = int(allowed_part)
+                                    requests_blocked = int(blocked_part)
+                        except:
+                            pass
                 
                 # If we couldn't find the IP in output, use direct_ip as fallback
                 if not actual_ip:
                     actual_ip = direct_ip
+                    
+                # Display bandwidth information if available
+                if bandwidth_kb is not None:
+                    print(f"[BANDWIDTH] Used {bandwidth_kb} KB for scraping")
+                    if requests_allowed is not None and requests_blocked is not None:
+                        total_requests = requests_allowed + requests_blocked
+                        efficiency = (requests_blocked / total_requests * 100) if total_requests > 0 else 0
+                        print(f"[BANDWIDTH] Efficiency: {requests_allowed} allowed, {requests_blocked} blocked ({efficiency:.1f}% blocked)")
                     
                 # Clearly log the actual IP that was used
                 print(f"[IP INFO] ACTUAL IP used for scraping: {actual_ip}{' (via proxy)' if is_proxy else ' (direct)'}")
@@ -139,6 +173,14 @@ class ScraperService:
                     print(f"[IP TRACKING] Tracked {is_proxy and 'proxy' or 'direct'} IP {actual_ip} for URL: {url}")
                 except Exception as e:
                     print(f"[IP TRACKING ERROR] Failed to track IP: {str(e)}")
+                
+                # Track bandwidth information if available
+                if bandwidth_kb is not None and requests_allowed is not None and requests_blocked is not None:
+                    try:
+                        self.storage_service.track_bandwidth_for_url(url, bandwidth_kb, requests_allowed, requests_blocked, is_proxy)
+                        print(f"[BANDWIDTH TRACKING] Saved bandwidth stats: {bandwidth_kb} KB, {requests_allowed} allowed, {requests_blocked} blocked")
+                    except Exception as e:
+                        print(f"[BANDWIDTH TRACKING ERROR] Failed to track bandwidth: {str(e)}")
                 
                 # We've already handled IP tracking in the code above, so we don't need to do anything here
             else:
