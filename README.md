@@ -27,7 +27,9 @@ A modern, service-oriented web scraping system designed to collect car listings 
 ## ✨ Key Features
 
 - **🎭 Modern Web Scraping**: Playwright-based engine handles JavaScript-heavy sites
-- **🔄 Smart Deduplication**: Automatically detects and filters out duplicate listings
+- **� API Integration**: Official mobile.de API support for high-volume data access
+- **🔄 Platform Selection**: Choose between web scraping or API integration
+- **�🔄 Smart Deduplication**: Automatically detects and filters out duplicate listings
 - **📱 Telegram Notifications**: Get instant alerts for new car listings with rich formatting
 - **⏱️ Flexible Scheduling**: Configure custom intervals for automatic scraping
 - **🚀 Auto-Notifications**: Automatically send new listings as they're discovered
@@ -144,8 +146,31 @@ TELEGRAM_CHAT_ID=your_chat_id_here
    ```
 
 For detailed instructions on configuration:
+- [Mobile.de API Integration](./docs/mobile_de_api_integration.md)
 - [IP Tracking Guide](./docs/ip_tracking_guide.md)
 - [Proxy Guide](./docs/proxy_guide.md)
+
+### Mobile.de API Setup (Optional)
+
+For high-volume usage and official API access:
+
+1. **Contact mobile.de for API access**:
+   - **Phone**: 030 81097-500 (Monday-Friday, 8:00-18:00)
+   - **Email**: service@team.mobile.de
+   - **Address**: mobile.de GmbH, Dernburgstraße 50, 14057 Berlin
+
+2. **Configure API credentials** in `.env` file:
+   ```env
+   MOBILE_DE_API_USERNAME=your_username
+   MOBILE_DE_API_PASSWORD=your_password
+   MOBILE_DE_API_BASE_URL=https://api.mobile.de
+   ```
+
+3. **Or use the UI configuration**:
+   - Open the Streamlit interface: `streamlit run ui/streamlit_app.py`
+   - Go to the **"🔧 API Config"** page (dedicated configuration page)
+   - Enter credentials and test connection
+   - Or use the quick link on the **"🔍 Scraper"** page
 
 ## 📋 Usage
 
@@ -156,8 +181,11 @@ The CLI provides a powerful interface for running the scraper and managing resul
 #### Essential Commands
 
 ```bash
-# Run the scraper on a marketplace URL
+# Run the scraper on a marketplace URL (default: web scraping)
 python cli/main.py run "https://www.example-marketplace.com/cars/search?brand=bmw"
+
+# Run with mobile.de API (requires API credentials)
+python cli/main.py run "https://mobile.de/search?make=BMW" --platform mobile.de
 
 # View the latest results (first 10 by default)
 python cli/main.py list
@@ -169,14 +197,48 @@ python cli/main.py search "diesel automatic"
 python cli/main.py send 1 3 5
 ```
 
+#### Platform Selection
+
+```bash
+# Web scraping mode (default) - works with eBay Kleinanzeigen, etc.
+python cli/main.py run "https://ebay-kleinanzeigen.de/search" --platform scraper
+
+# Mobile.de API mode - requires API credentials
+python cli/main.py run "https://mobile.de/search?make=BMW" --platform mobile.de
+
+# Check available platforms
+python cli/main.py run --help  # Shows platform options
+```
+
 #### Automation & Scheduling
 
 ```bash
 # Schedule periodic scraping (every 5 minutes, 10 runs)
 python cli/main.py schedule "https://www.example-marketplace.com/cars/search?brand=bmw" --interval 300 --runs 10
 
+# Schedule with mobile.de API for high-volume usage
+python cli/main.py schedule "https://mobile.de/search?make=BMW" --platform mobile.de --interval 300 --runs 0
+
 # Continuous monitoring with saved URLs (until manually stopped)
 python cli/main.py schedule --use-saved --random --runs 0 --interval 300
+```
+
+#### API Configuration & Usage
+
+```bash
+# Configure mobile.de API credentials (or use the UI)
+# Set these in your .env file:
+# MOBILE_DE_API_USERNAME=your_username
+# MOBILE_DE_API_PASSWORD=your_password
+
+# High-volume API usage example (19+ filters every 5 minutes)
+python cli/main.py schedule \
+  "https://mobile.de/search?make=BMW&model=X5" \
+  "https://mobile.de/search?make=Audi&model=A4" \
+  --platform mobile.de \
+  --interval 300 \
+  --runs 0 \
+  --notify-new
 ```
 
 #### Proxy & Notification Features
@@ -207,7 +269,9 @@ streamlit run ui/streamlit_app.py
 #### Key UI Features
 
 - **🔍 URL Management**: Add, save, and organize marketplace URLs
-- **🔄 Interactive Monitoring**: Run manual scans or set up automatic monitoring
+- **� Platform Selection**: Choose between web scraping and mobile.de API
+- **🔧 API Configuration**: Secure credential management for mobile.de API
+- **�🔄 Interactive Monitoring**: Run manual scans or set up automatic monitoring
 - **⚙️ Scraper Controls**: Run immediately or schedule automatic monitoring
 - **⏱️ Flexible Scheduling**: Set custom intervals from 30 seconds to 1 hour
 - **📱 Notification Settings**: Configure Telegram notifications
@@ -218,6 +282,24 @@ streamlit run ui/streamlit_app.py
 - **🛠️ IP Monitoring**: View and analyze IP usage for each URL
 - **📊 Data Visualization**: View price trends and statistics
 - **🧪 Playground**: Test specific features and functionalities
+
+## 🔧 New API Configuration Page
+
+VroomSniffer now includes a dedicated **"🔧 API Config"** page in the Streamlit UI for comprehensive platform and credential management:
+
+### Features:
+- **Platform Overview**: See status of all available platforms (Web Scraping vs mobile.de API)
+- **Credential Management**: Secure setup, testing, and management of mobile.de API credentials
+- **Usage Examples**: Ready-to-use CLI commands for both platforms
+- **Contact Information**: Direct links to mobile.de support for API access
+- **Rate Limiting Info**: Guidance for high-volume usage planning
+
+### Access:
+- **Main Navigation**: Click "🔧 API Config" in the sidebar
+- **Quick Link**: Use the "🔧 API Config" button on the Scraper page
+- **Direct**: Navigate to the API Configuration page from any page
+
+This dedicated page makes it easy to configure and manage your API credentials without cluttering the main scraper interface.
 
 ## Project Structure
 

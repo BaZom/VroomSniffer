@@ -157,6 +157,13 @@ def setup_parser() -> argparse.ArgumentParser:
         default="NONE",
         help="Type of proxy to use (default: NONE)"
     )
+    run_parser.add_argument(
+        "--platform",
+        type=str,
+        choices=["scraper", "mobile.de"],
+        default="scraper",
+        help="Platform to use for data fetching: 'scraper' for web scraping (default), 'mobile.de' for mobile.de API"
+    )
     
     # Version command
     version_parser = subparsers.add_parser(
@@ -223,6 +230,13 @@ def setup_parser() -> argparse.ArgumentParser:
         choices=["NONE", "WEBSHARE_RESIDENTIAL"],
         default="NONE",
         help="Type of proxy to use (default: NONE)"
+    )
+    schedule_parser.add_argument(
+        "--platform",
+        type=str,
+        choices=["scraper", "mobile.de"],
+        default="scraper",
+        help="Platform to use for data fetching: 'scraper' for web scraping (default), 'mobile.de' for mobile.de API"
     )
     
     # Diagnostics command

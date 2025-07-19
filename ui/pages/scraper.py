@@ -2,6 +2,7 @@ import streamlit as st
 import sys
 import json
 import time
+import requests
 from pathlib import Path
 
 # Add the parent directory to the path so we can import from local modules
@@ -25,6 +26,7 @@ from ui.components.styles import get_main_styles
 from ui.components.telegram_controls import send_listings_to_telegram
 from ui.components.url_management import display_url_management
 from ui.components.scraper_controls import display_scraper_controls, display_scraper_progress
+from ui.components.api_configuration import auto_configure_api_from_env
 
 # Initialize services via the provider
 storage_service = get_storage_service()
@@ -84,6 +86,9 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
     # Apply centralized styles from components
     st.markdown(get_main_styles(), unsafe_allow_html=True)
     
+    # Auto-configure API from environment variables
+    auto_configure_api_from_env()
+    
     # Use the state management component for consistent initialization
     initialize_scraper_state(url_pool_service)
     
@@ -118,6 +123,26 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
     url_pool_modified = display_url_management(url_pool_service, scheduler_service)
     if url_pool_modified:
         st.rerun()  # Refresh the UI if URLs were modified
+    
+    st.divider()
+    
+    # Quick API status and link to dedicated config page
+    from api.manager import get_api_manager
+    api_manager = get_api_manager()
+    platform_status = api_manager.get_platform_status()
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        mobile_de_status = platform_status.get("mobile.de", {})
+        if mobile_de_status.get("available", False):
+            st.success("🔗 mobile.de API: Configured and ready")
+        else:
+            st.info("🔗 mobile.de API: Not configured (web scraping mode)")
+    
+    with col2:
+        if st.button("🔧 API Config", use_container_width=True):
+            st.session_state.current_page = "🔧 API Config"
+            st.rerun()
     
     st.divider()
     
@@ -178,14 +203,21 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
                     elif step == "complete":
                         scrape_log.info("✅ Scraping complete!")
                 
-                # Initialize scraper service with proxy settings from session state
+                # Get selected platform
+                selected_platform = st.session_state.get('selected_platform', 'scraper')
+                
+                # Use platform-aware fetching
+                from api.manager import get_api_manager
+                api_manager = get_api_manager()
+                
+                # Set active platform
+                if not api_manager.set_active_platform(selected_platform):
+                    scrape_log.error(f"Platform '{selected_platform}' not available!")
+                    return
+                
+                # Initialize scraper service with proxy settings for scraper platform
                 use_proxy = st.session_state.get('use_proxy', False)
                 proxy_type = st.session_state.get('proxy_type', 'NONE')
-                scraper_service = get_scraper_service(use_proxy=use_proxy, proxy_type=proxy_type)
-                
-                # Log proxy settings for debugging
-                import requests
-                from proxy.manager import ProxyManager, ProxyType
                 
                 # Get direct IP for comparison (but don't show it yet)
                 direct_ip = "Unknown"
@@ -195,18 +227,72 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
                 except Exception as e:
                     print(f"[IP INFO ERROR] Failed to get direct IP: {str(e)}")
                 
-                # Use our ScraperService instance with proxy settings
-                results = scraper_service.get_listings_for_filter(
-                    filters,
-                    url_pool_service.build_search_url_from_custom,
-                    all_old_path, 
-                    latest_new_path,
-                    root_dir,
-                    progress_callback=scraper_progress_callback
-                )
+                # Fetch listings using the selected platform
+                try:
+                    if selected_platform == "scraper":
+                        # Use existing scraper service for web scraping
+                        scraper_service = get_scraper_service(use_proxy=use_proxy, proxy_type=proxy_type)
+                        results = scraper_service.get_listings_for_filter(
+                            filters,
+                            url_pool_service.build_search_url_from_custom,
+                            all_old_path, 
+                            latest_new_path,
+                            root_dir,
+                            progress_callback=scraper_progress_callback
+                        )
+                        # Unpack results - now it includes used_ip and is_proxy_used
+                        all_listings, new_listings = results
+                    else:
+                        # Use API manager for API-based platforms
+                        scrape_log.info(f"🔌 Fetching via {selected_platform} API...")
+                        
+                        # Fetch listings via API
+                        api_listings = api_manager.fetch_listings(
+                            [current_url],
+                            use_proxy=use_proxy,
+                            proxy_type=proxy_type
+                        )
+                        
+                        if api_listings:
+                            scrape_log.info("💾 Saving listings...")
+                            
+                            # Convert to expected format and save
+                            formatted_listings = []
+                            for listing in api_listings:
+                                formatted_listing = {
+                                    'Title': listing.get('title', 'Unknown Title'),
+                                    'Price': listing.get('price', 'N/A'),
+                                    'Location': listing.get('location', 'Unknown Location'),
+                                    'Mileage': listing.get('mileage', 'N/A'),
+                                    'Year': listing.get('year', 'N/A'),
+                                    'Fuel Type': listing.get('fuel_type', 'N/A'),
+                                    'Transmission': listing.get('transmission', 'N/A'),
+                                    'URL': listing.get('url', ''),
+                                    'Image URL': listing.get('image_url', ''),
+                                    'Description': listing.get('description', ''),
+                                    'Seller Type': listing.get('seller_type', 'Unknown'),
+                                    'ID': listing.get('id', ''),
+                                    'Source': listing.get('source', selected_platform),
+                                    'Scraped At': listing.get('scraped_at', time.strftime('%Y-%m-%d %H:%M:%S'))
+                                }
+                                formatted_listings.append(formatted_listing)
+                            
+                            # Save to latest results
+                            storage_service.save_to_cache(str(latest_new_path), formatted_listings)
+                            
+                            # Update all old results
+                            storage_service.append_to_cache(str(all_old_path), formatted_listings)
+                            
+                            # For now, treat all API results as new (could be improved)
+                            all_listings = formatted_listings
+                            new_listings = formatted_listings
+                        else:
+                            all_listings = []
+                            new_listings = []
                 
-                # Unpack results - now it includes used_ip and is_proxy_used
-                all_listings, new_listings = results
+                except Exception as api_error:
+                    scrape_log.error(f"❌ {selected_platform} fetch failed: {str(api_error)}")
+                    return
                 
                 # Try to get the actual IP used for scraping from ip_tracking.json
                 import json

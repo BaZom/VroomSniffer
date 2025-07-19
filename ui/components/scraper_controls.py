@@ -55,9 +55,48 @@ def display_scraper_controls(scheduler_service):
         prev_random_selection = st.session_state.get('random_url_selection', True)
         prev_use_proxy = st.session_state.get('use_proxy', False)
         prev_proxy_type = st.session_state.get('proxy_type', 'NONE')
+        prev_platform = st.session_state.get('selected_platform', 'scraper')
         
         # Add controls
         with st.expander("Advanced Settings"):
+            # Platform selection
+            st.write("**Platform selection**")
+            from api.manager import get_api_manager, Platform
+            
+            api_manager = get_api_manager()
+            available_platforms = api_manager.get_available_platforms()
+            platform_display_names = Platform.get_display_names()
+            
+            # Create display options for available platforms
+            platform_options = {}
+            for platform in available_platforms:
+                display_name = platform_display_names.get(platform, platform)
+                platform_options[display_name] = platform
+            
+            # Show platform selection
+            if len(platform_options) > 1:
+                selected_display = st.selectbox(
+                    "Data source platform",
+                    options=list(platform_options.keys()),
+                    index=list(platform_options.values()).index(prev_platform) if prev_platform in platform_options.values() else 0,
+                    help="Choose between web scraping or API integration"
+                )
+                st.session_state.selected_platform = platform_options[selected_display]
+                
+                # Show platform status
+                platform_status = api_manager.get_platform_status()
+                current_status = platform_status.get(st.session_state.selected_platform, {})
+                if current_status.get('available', False):
+                    st.success(f"✅ {current_status.get('description', 'Available')}")
+                else:
+                    st.warning(f"⚠️ Platform not configured")
+            else:
+                # Only scraper available
+                st.session_state.selected_platform = 'scraper'
+                st.info("Web scraping mode (mobile.de API not configured)")
+            
+            st.divider()
+            
             # Existing settings
             st.session_state.auto_send_active = st.toggle("Auto-send new findings", prev_auto_send)
             st.session_state.sound_effects_enabled = st.toggle("Sound effects", prev_sound_effects)
@@ -97,7 +136,8 @@ def display_scraper_controls(scheduler_service):
             prev_sound_effects != st.session_state.sound_effects_enabled or
             prev_random_selection != st.session_state.random_url_selection or
             prev_use_proxy != st.session_state.use_proxy or
-            prev_proxy_type != st.session_state.proxy_type):
+            prev_proxy_type != st.session_state.proxy_type or
+            prev_platform != st.session_state.selected_platform):
             changed = True
     
     with col3:

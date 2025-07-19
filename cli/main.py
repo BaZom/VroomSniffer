@@ -35,7 +35,9 @@ from cli.commands import (
     search_listings,
     send_listings_by_indexes,
     run_scraper_with_url_improved,
-    run_scheduler
+    run_scraper_with_platform,
+    run_scheduler,
+    run_scheduler_with_platform
 )
 from cli.argparse_setup import setup_parser
 from cli.diagnostics import display_ip_tracking
@@ -74,10 +76,50 @@ def main() -> int:
         elif args.command == "version":
             print(f"\n{Fore.CYAN}🚗 VroomSniffer Car Scraper v1.0.0{Style.RESET_ALL}\n")
         elif args.command == "run":
-            success = run_scraper_with_url_improved(services, args.urls, args.notify_new, args.notify_count)
+            # Configure platform
+            from api.manager import get_api_manager
+            api_manager = get_api_manager()
+            
+            # Check if platform is available
+            if not api_manager.is_platform_available(args.platform):
+                if args.platform == "mobile.de":
+                    print_error("mobile.de API not configured. Please set up API credentials first.")
+                    return 1
+                else:
+                    print_error(f"Platform '{args.platform}' is not available.")
+                    return 1
+            
+            # Set active platform
+            api_manager.set_active_platform(args.platform)
+            
+            success = run_scraper_with_platform(
+                services, 
+                args.urls, 
+                args.notify_new, 
+                args.notify_count,
+                args.platform,
+                use_proxy=args.use_proxy,
+                proxy_type=args.proxy_type
+            )
             if not success:
                 return 1
         elif args.command == "schedule":
+            # Configure platform
+            from api.manager import get_api_manager
+            api_manager = get_api_manager()
+            
+            # Check if platform is available
+            if not api_manager.is_platform_available(args.platform):
+                if args.platform == "mobile.de":
+                    print_error("mobile.de API not configured. Please set up API credentials first.")
+                    return 1
+                else:
+                    print_error(f"Platform '{args.platform}' is not available.")
+                    return 1
+            
+            # Set active platform
+            api_manager.set_active_platform(args.platform)
+            
             # Load URLs - either from command line or saved_urls.json
             urls = []
             if args.use_saved or not args.urls:
@@ -89,14 +131,17 @@ def main() -> int:
                 urls = args.urls
             
             # Run the scheduler with the URLs
-            run_scheduler(
+            run_scheduler_with_platform(
                 services=services,
                 urls=urls,
                 interval=args.interval,
                 runs=args.runs,
                 random_selection=args.random,
                 notify_new=args.notify_new,
-                notify_count=args.notify_count
+                notify_count=args.notify_count,
+                platform=args.platform,
+                use_proxy=args.use_proxy,
+                proxy_type=args.proxy_type
             )
         elif args.command == "diagnostics":
             if args.show_ip_tracking:

@@ -10,6 +10,7 @@ from ui.pages.home import show_home_page
 from ui.pages.scraper import show_scraper_page
 from ui.pages.data_storage import show_data_storage_page
 from ui.pages.playground import show_playground_page
+from ui.pages.api_configuration import show_api_configuration_page
 
 # Import components
 from ui.components.styles import get_main_styles
@@ -58,6 +59,10 @@ def main():
                     type="primary" if st.session_state.current_page == "🔍 Scraper" else "secondary"):
             navigate_to("🔍 Scraper")
             
+        if st.button("🔧 API Config", key="nav_api", use_container_width=True, 
+                    type="primary" if st.session_state.current_page == "🔧 API Config" else "secondary"):
+            navigate_to("🔧 API Config")
+            
         if st.button("📊 Data Storage", key="nav_data", use_container_width=True, 
                     type="primary" if st.session_state.current_page == "📊 Data Storage" else "secondary"):
             navigate_to("📊 Data Storage")
@@ -69,11 +74,14 @@ def main():
         st.divider()
         st.caption("VroomSniffer v1.0")
     
+    # Main content area
     # Page routing
     if st.session_state.current_page == "🏠 Home":
         show_home_page(all_old_path, latest_new_path)
     elif st.session_state.current_page == "🔍 Scraper":
         show_scraper_page(all_old_path, latest_new_path, root_dir)
+    elif st.session_state.current_page == "🔧 API Config":
+        show_api_configuration_page()
     elif st.session_state.current_page == "📊 Data Storage":
         show_data_storage_page(all_old_path, latest_new_path)
     elif st.session_state.current_page == "🎮 Playground":

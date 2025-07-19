@@ -642,3 +642,233 @@ def run_scheduler(
     except KeyboardInterrupt:
         print("\n[*] Scheduled scraping stopped by user")
         services.scheduler_service.stop_scraping()
+
+
+def run_scraper_with_platform(
+    services: Services,
+    urls: Union[str, List[str]], 
+    notify_new: bool = False, 
+    notify_count: int = 5,
+    platform: str = "scraper",
+    use_proxy: bool = False,
+    proxy_type: str = "NONE"
+) -> bool:
+    """
+    Run scraper/API with platform selection support.
+    
+    Args:
+        services: Services instance
+        urls: Single URL string or list of URLs to scrape/fetch
+        notify_new: Whether to send notifications for new listings
+        notify_count: Number of new listings to send detailed notifications for
+        platform: Platform to use ('scraper' or 'mobile.de')
+        use_proxy: Whether to use proxy (for scraper only)
+        proxy_type: Type of proxy to use (for scraper only)
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    from cli.utils import print_info, print_warning, print_error, print_success
+    from api.manager import get_api_manager
+    
+    if isinstance(urls, str):
+        urls = [urls]  # Convert single URL to list
+    
+    api_manager = get_api_manager()
+    
+    # Verify platform is available
+    if not api_manager.is_platform_available(platform):
+        print_error(f"Platform '{platform}' is not available or not configured.")
+        return False
+    
+    # Set active platform
+    api_manager.set_active_platform(platform)
+    
+    print_info(f"Using platform: {platform}")
+    
+    try:
+        # Fetch listings using the API manager
+        all_listings = api_manager.fetch_listings(
+            urls, 
+            use_proxy=use_proxy, 
+            proxy_type=proxy_type
+        )
+        
+        if not all_listings:
+            print_warning("No listings found.")
+            return False
+            
+        print_success(f"Found {len(all_listings)} listings via {platform}")
+        
+        # Save to storage using the existing storage service
+        latest_results_path = services.get_path("latest_results")
+        
+        # Convert to the expected format for storage
+        formatted_listings = []
+        for listing in all_listings:
+            # Ensure the listing has the expected format
+            formatted_listing = {
+                'Title': listing.get('title', 'Unknown Title'),
+                'Price': listing.get('price', 'N/A'),
+                'Location': listing.get('location', 'Unknown Location'),
+                'Mileage': listing.get('mileage', 'N/A'),
+                'Year': listing.get('year', 'N/A'),
+                'Fuel Type': listing.get('fuel_type', 'N/A'),
+                'Transmission': listing.get('transmission', 'N/A'),
+                'URL': listing.get('url', ''),
+                'Image URL': listing.get('image_url', ''),
+                'Description': listing.get('description', ''),
+                'Seller Type': listing.get('seller_type', 'Unknown'),
+                'ID': listing.get('id', ''),
+                'Source': listing.get('source', platform),
+                'Scraped At': listing.get('scraped_at', time.strftime('%Y-%m-%d %H:%M:%S'))
+            }
+            formatted_listings.append(formatted_listing)
+        
+        # Save to latest results
+        services.storage_service.save_to_cache(latest_results_path, formatted_listings)
+        
+        # Update all old results
+        all_old_path = services.get_path("all_old")
+        services.storage_service.append_to_cache(all_old_path, formatted_listings)
+        
+        # Handle notifications if requested
+        if notify_new:
+            # Detect new listings (this could be improved to compare with previous runs)
+            new_listings = formatted_listings  # For now, treat all as new
+            
+            if new_listings:
+                print_info(f"Found {len(new_listings)} new listings")
+                
+                # Limit notifications if specified
+                listings_to_notify = new_listings
+                if notify_count > 0:
+                    listings_to_notify = new_listings[:notify_count]
+                    
+                # Send notifications
+                for listing in listings_to_notify:
+                    try:
+                        services.notification_service.send_listing(listing)
+                    except Exception as e:
+                        print_warning(f"Failed to send notification: {str(e)}")
+                        
+                print_success(f"Sent {len(listings_to_notify)} notifications via Telegram")
+        
+        return True
+        
+    except Exception as e:
+        print_error(f"Failed to fetch listings via {platform}: {str(e)}")
+        return False
+
+
+def run_scheduler_with_platform(
+    services: Services,
+    urls: List[str],
+    interval: int = 60,
+    runs: int = 5,
+    random_selection: bool = False,
+    notify_new: bool = False,
+    notify_count: int = 5,
+    platform: str = "scraper",
+    use_proxy: bool = False,
+    proxy_type: str = "NONE"
+) -> None:
+    """
+    Run the scheduler for periodic scraping/API fetching with platform selection.
+    
+    Args:
+        services: Services instance
+        urls: List of URLs to scrape/fetch
+        interval: Time between runs in seconds
+        runs: Maximum number of runs (0 for unlimited)
+        random_selection: Whether to select URLs randomly
+        notify_new: Whether to notify about new listings
+        notify_count: Number of listings to send notifications for
+        platform: Platform to use ('scraper' or 'mobile.de')
+        use_proxy: Whether to use proxy (for scraper only)
+        proxy_type: Type of proxy to use (for scraper only)
+    """
+    try:
+        # Set up scheduler
+        services.scheduler_service.set_interval(interval)
+        services.scheduler_service.start_scraping()
+        
+        # Import color utilities
+        from cli.utils import print_info
+        from api.manager import get_api_manager
+        
+        # Configure API manager
+        api_manager = get_api_manager()
+        api_manager.set_active_platform(platform)
+        
+        print(f"\n{Back.BLUE}{Fore.WHITE} SCHEDULER STARTED {Style.RESET_ALL}")
+        print_info(f"Starting scheduled {platform} runs with {len(urls)} URLs")
+        
+        minutes, seconds = divmod(interval, 60)
+        if minutes > 0:
+            interval_str = f"{minutes}m {seconds}s"
+        else:
+            interval_str = f"{seconds}s"
+        
+        print_info(f"Platform: {platform}")
+        print_info(f"Interval: {interval_str}")
+        print_info(f"Mode: {'Random' if random_selection else 'Sequential'} URL selection")
+        
+        if runs > 0:
+            print_info(f"Will perform up to {runs} runs")
+        else:
+            print_info(f"Will run indefinitely until stopped")
+            
+        print(f"{Fore.YELLOW}[!] Press Ctrl+C to stop early{Style.RESET_ALL}")
+        
+        runs_completed = 0
+        # Initialize the random seed with current time for better randomness
+        random.seed()
+        
+        # Loop until we hit max runs (if specified) or until manually stopped
+        while (runs == 0 or runs_completed < runs) and services.scheduler_service.is_scraping_active():
+            if services.scheduler_service.is_time_to_scrape():
+                runs_remaining = "unlimited" if runs == 0 else str(runs)
+                print(f"\n{Fore.CYAN}[*] Run {runs_completed + 1}/{runs_remaining}{Style.RESET_ALL}")
+                
+                # Use scheduler service for URL selection
+                url_index = services.scheduler_service.select_next_url_index(
+                    url_count=len(urls),
+                    random_selection=random_selection,
+                    current_run=runs_completed
+                )
+                selected_url = urls[url_index]
+                run_urls = [selected_url]
+                
+                selection_mode = "Random" if random_selection else "Sequential"
+                print(f"{Fore.BLUE}[*] {selection_mode} URL selection ({platform}):{Style.RESET_ALL} {selected_url} {Fore.YELLOW}(index {url_index+1}/{len(urls)}){Style.RESET_ALL}")
+                
+                success = run_scraper_with_platform(
+                    services, 
+                    run_urls, 
+                    notify_new, 
+                    notify_count,
+                    platform=platform,
+                    use_proxy=use_proxy,
+                    proxy_type=proxy_type
+                )
+                
+                runs_completed = services.scheduler_service.record_scrape()
+                
+                if runs > 0 and runs_completed >= runs:
+                    services.scheduler_service.stop_scraping()
+                    break
+                    
+                next_run_in = services.scheduler_service.get_time_until_next_scrape()
+                minutes, seconds = divmod(int(next_run_in), 60)
+                time_str = f"{minutes}m {seconds}s" if minutes > 0 else f"{seconds}s"
+                print(f"{Fore.CYAN}[*] Next run in {time_str}{Style.RESET_ALL}")
+            
+            # Sleep for a short time to avoid CPU spinning
+            time.sleep(1)
+            
+        print(f"[+] Scheduled {platform} runs complete. Performed {runs_completed} runs.")
+        
+    except KeyboardInterrupt:
+        print(f"\n[*] Scheduled {platform} runs stopped by user")
+        services.scheduler_service.stop_scraping()

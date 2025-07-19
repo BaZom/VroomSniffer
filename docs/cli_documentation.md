@@ -67,6 +67,17 @@ WEBSHARE_USERNAME=your_username_here
 WEBSHARE_PASSWORD=your_password_here
 ```
 
+5. For mobile.de API access, configure API credentials in a `.env` file:
+```
+MOBILE_DE_API_USERNAME=your_username_here
+MOBILE_DE_API_PASSWORD=your_password_here
+MOBILE_DE_API_BASE_URL=https://api.mobile.de
+```
+
+> **Note**: mobile.de API access requires contacting mobile.de support:
+> - Phone: 030 81097-500 (Monday-Friday, 8:00-18:00)
+> - Email: service@team.mobile.de
+
 ## Quick Reference
 
 ```bash
@@ -76,11 +87,17 @@ python cli/main.py --help
 # Get help for a specific command
 python cli/main.py run --help
 
-# Run the scraper with a URL
+# Run the scraper with a URL (default: web scraping)
 python cli/main.py run "https://www.example-marketplace.com/cars/search?brand=bmw"
 
-# Run with proxy support
+# Run with mobile.de API
+python cli/main.py run "https://mobile.de/search?make=BMW" --platform mobile.de
+
+# Run with proxy support (web scraping)
 python cli/main.py run "https://www.example-marketplace.com/cars/search?brand=bmw" --use-proxy --proxy-type WEBSHARE_RESIDENTIAL
+
+# Schedule with API for high-volume usage
+python cli/main.py schedule "https://mobile.de/search?make=BMW" --platform mobile.de --interval 300
 
 # List results (first 10 by default)
 python cli/main.py list
@@ -105,33 +122,63 @@ python cli/main.py diagnostics --show-ip-tracking
 
 ### run - Running the Scraper
 
-The `run` command executes the scraper on one or more URLs. This is the primary command for gathering car listings from marketplace websites.
+The `run` command executes the scraper or API fetcher on one or more URLs. This is the primary command for gathering car listings from marketplace websites or APIs.
 
 ```bash
 python cli/main.py run [URLs...] [options]
 ```
 
 #### Arguments:
-- `URLs`: One or more marketplace search URLs to scrape (required)
+- `URLs`: One or more marketplace search URLs to scrape/fetch (required)
 
 #### Options:
+- `--platform PLATFORM`: Platform to use for data fetching:
+  - `scraper` (default): Web scraping mode (works with eBay Kleinanzeigen, etc.)
+  - `mobile.de`: mobile.de API mode (requires API credentials)
 - `--notify-new`: Send Telegram notifications for new listings found
 - `--notify-count N`: Limit notifications to N listings (default: -1 means all)
-- `--use-proxy`: Use proxy for scraping to avoid blocking
+- `--use-proxy`: Use proxy for scraping to avoid blocking (scraper mode only)
 - `--proxy-type TYPE`: Type of proxy to use: NONE or WEBSHARE_RESIDENTIAL (default: NONE)
 
+#### Platform Selection:
+
+**Web Scraping Mode (`--platform scraper`):**
+- Default mode, works with eBay Kleinanzeigen and other marketplace sites
+- Supports proxy configuration for avoiding IP blocking
+- Uses Playwright for JavaScript-heavy sites
+- No additional setup required
+
+**Mobile.de API Mode (`--platform mobile.de`):**
+- Official mobile.de API integration for high-volume usage
+- Requires API credentials from mobile.de support
+- Rate-limited to 1 request per second
+- Ideal for continuous monitoring with 5-minute intervals
+- Contact mobile.de: 030 81097-500 or service@team.mobile.de
+
 #### What happens when you run this command:
-1. The system checks if the provided URLs are valid
-2. For each URL, the scraper:
-   - Connects to the webpage (directly or through a proxy)
-   - Records the IP address used for tracking
-   - Extracts car listing information
+1. The system validates the selected platform and credentials
+2. For each URL, the system:
+   - **Scraper mode**: Connects to webpage, records IP, extracts listings
+   - **API mode**: Converts URL to API parameters, makes authenticated request
    - Compares new results with existing listings
    - Stores all listings in storage files
 3. If `--notify-new` is used, sends notifications via Telegram
 4. Shows a summary of found listings 
 
 #### Examples:
+
+##### Platform Selection
+
+```bash
+# WEB SCRAPING: Default mode for eBay Kleinanzeigen, etc.
+python cli/main.py run "https://ebay-kleinanzeigen.de/search" --platform scraper
+
+# MOBILE.DE API: Use official API (requires credentials)
+python cli/main.py run "https://mobile.de/search?make=BMW" --platform mobile.de
+
+# AUTO-DETECT: Platform can be inferred from URL (scraper is default)
+python cli/main.py run "https://mobile.de/search?make=BMW"  # Will use scraper unless specified
+```
 
 ##### Run Basic Usage
 
@@ -322,31 +369,41 @@ python cli/main.py send 1 2 3
 
 ### schedule - Automated Monitoring
 
-The `schedule` command sets up periodic scraping at fixed intervals, allowing VroomSniffer to continuously monitor listings without manual intervention. This is particularly useful for catching new listings quickly.
+The `schedule` command sets up periodic scraping or API fetching at fixed intervals, allowing VroomSniffer to continuously monitor listings without manual intervention. This is particularly useful for catching new listings quickly.
 
 ```bash
 python cli/main.py schedule [URLs...] [options]
 ```
 
 #### Arguments:
-- `URLs`: One or more URLs to scrape (optional if using `--use-saved`)
+- `URLs`: One or more URLs to scrape/fetch (optional if using `--use-saved`)
 
 #### Options:
+- `--platform PLATFORM`: Platform to use for data fetching:
+  - `scraper` (default): Web scraping mode
+  - `mobile.de`: mobile.de API mode (requires API credentials)
 - `--use-saved`: Use URLs from storage/saved_urls.json instead of command line arguments
 - `--random`: Select URLs randomly instead of sequentially (useful for rotating between different searches)
-- `--interval N`: Seconds between scraping runs (default: 60 seconds, minimum: 30 seconds)
+- `--interval N`: Seconds between runs (default: 60 seconds, minimum: 30 seconds)
 - `--runs N`: Maximum number of runs to perform (default: 5, use 0 for unlimited runs until manually stopped)
 - `--notify-new`: Send Telegram notifications for new listings found in each run
 - `--notify-count N`: Limit notifications to N listings per run (default: -1 for all new listings)
-- `--use-proxy`: Use proxy for scraping to avoid blocking
+- `--use-proxy`: Use proxy for scraping to avoid blocking (scraper mode only)
 - `--proxy-type TYPE`: Type of proxy to use: NONE or WEBSHARE_RESIDENTIAL (default: NONE)
 
+#### High-Volume API Usage:
+The schedule command is ideal for high-volume mobile.de API usage:
+- **19+ filters every 5 minutes**: Use `--interval 300` with multiple URLs
+- **Continuous monitoring**: Use `--runs 0` for ~12 hours/day operation
+- **Rate limiting**: Built-in 1-second intervals between API calls
+- **Enterprise ready**: Contact mobile.de for commercial API pricing
+
 #### What happens when you run this command:
-1. The system loads URLs either from command line arguments or saved_urls.json
+1. The system validates the selected platform and loads URLs
 2. The scheduler:
    - Starts a continuous loop that runs until the maximum number of runs is reached
    - For each run, selects a URL (either sequentially or randomly)
-   - Executes the scraper for the selected URL
+   - Executes the scraper/API fetcher for the selected URL
    - If `--notify-new` is enabled, sends notifications for new listings
    - Waits for the specified interval before the next run
    - Shows progress and countdown between runs
@@ -365,8 +422,8 @@ To use the `--use-saved` option, you need to have URLs stored in storage/saved_u
         "last_run": "2025-06-19 05:45:55"
       }
     },
-    "https://www.example-marketplace.com/cars/search?brand=audi": {
-      "description": "Audi cars",
+    "https://mobile.de/search?make=BMW&model=X5": {
+      "description": "BMW X5 via API",
       "stats": {
         "run_count": 32,
         "total_listings": 198,
@@ -380,17 +437,24 @@ To use the `--use-saved` option, you need to have URLs stored in storage/saved_u
 
 #### Examples:
 
-##### Schedule Basic Scheduling
+##### Platform-Specific Scheduling
 
 ```bash
-# SIMPLEST: Schedule a specific URL to run 5 times (default)
-python cli/main.py schedule "https://www.example-marketplace.com/cars/search?brand=bmw"
+# WEB SCRAPING: Schedule traditional scraping (default)
+python cli/main.py schedule "https://ebay-kleinanzeigen.de/search" --platform scraper --interval 300
 
-# CONTINUOUS MONITORING: Run indefinitely until manually stopped (Ctrl+C)
-python cli/main.py schedule --use-saved --runs 0
+# MOBILE.DE API: Schedule API fetching for high-volume usage
+python cli/main.py schedule "https://mobile.de/search?make=BMW" --platform mobile.de --interval 300 --runs 0
 
-# LONGER INTERVALS: Run every 5 minutes (300 seconds)
-python cli/main.py schedule --use-saved --interval 300
+# HIGH-VOLUME API: Multiple mobile.de filters every 5 minutes
+python cli/main.py schedule \
+  "https://mobile.de/search?make=BMW&model=X5" \
+  "https://mobile.de/search?make=Audi&model=A4" \
+  "https://mobile.de/search?make=Mercedes&model=C-Class" \
+  --platform mobile.de \
+  --interval 300 \
+  --runs 0 \
+  --notify-new
 ```
 
 ##### Schedule Using Saved URLs
@@ -539,6 +603,107 @@ The VroomSniffer CLI uses several JSON files for data storage and management:
 - **saved_urls.json**: Contains URLs to be used with the `--use-saved` option when running the scheduler.
 
 These files are located in the `storage/` directory. You can directly inspect or modify them if needed, though it's generally recommended to use the CLI commands to interact with the data.
+
+## Platform Selection
+
+VroomSniffer supports multiple data sources through platform selection. You can choose between traditional web scraping and official API integration.
+
+### Available Platforms
+
+#### Web Scraping (`--platform scraper`)
+- **Default mode** - works without additional setup
+- **Supports**: eBay Kleinanzeigen and other marketplace sites
+- **Features**: Proxy support, IP tracking, change detection
+- **Best for**: General marketplace monitoring, sites without APIs
+- **Limitations**: Potential for blocking, slower than APIs
+
+#### Mobile.de API (`--platform mobile.de`)
+- **Official API** - requires credentials from mobile.de
+- **Features**: High-volume usage, rate limiting, enterprise support
+- **Best for**: Continuous monitoring, high-frequency fetching (5-minute intervals)
+- **Requirements**: API credentials from mobile.de support
+
+### Platform Configuration
+
+#### Setting Up Mobile.de API
+1. **Contact mobile.de** for API access:
+   ```
+   Phone: 030 81097-500 (Monday-Friday, 8:00-18:00)
+   Email: service@team.mobile.de
+   ```
+
+2. **Configure credentials** in `.env` file:
+   ```env
+   MOBILE_DE_API_USERNAME=your_username
+   MOBILE_DE_API_PASSWORD=your_password
+   MOBILE_DE_API_BASE_URL=https://api.mobile.de
+   ```
+
+3. **Test the connection**:
+   ```bash
+   python cli/main.py run "https://mobile.de/search?make=BMW" --platform mobile.de
+   ```
+
+### Platform Selection Examples
+
+#### Choosing the Right Platform
+
+```bash
+# For eBay Kleinanzeigen (use scraper)
+python cli/main.py run "https://ebay-kleinanzeigen.de/search" --platform scraper
+
+# For mobile.de with API credentials (use API)
+python cli/main.py run "https://mobile.de/search?make=BMW" --platform mobile.de
+
+# Default behavior (scraper mode)
+python cli/main.py run "https://any-marketplace.com/search"
+```
+
+#### High-Volume API Usage
+
+For continuous monitoring with multiple filters:
+
+```bash
+# Schedule 19+ filters every 5 minutes
+python cli/main.py schedule \
+  "https://mobile.de/search?make=BMW&model=X5&priceFrom=20000&priceTo=40000" \
+  "https://mobile.de/search?make=Audi&model=A4&fuelType=diesel" \
+  "https://mobile.de/search?make=Mercedes&model=C-Class&transmission=automatic" \
+  --platform mobile.de \
+  --interval 300 \
+  --runs 0 \
+  --notify-new
+```
+
+#### Platform Availability Check
+
+```bash
+# Check what platforms are available
+python cli/main.py run --help  # Shows platform choices
+
+# If mobile.de API is not configured, you'll see an error:
+python cli/main.py run "https://mobile.de/search" --platform mobile.de
+# Error: mobile.de API not configured. Please set up API credentials first.
+```
+
+### Best Practices
+
+#### When to Use Web Scraping
+- Testing and development
+- Sites without official APIs
+- Low-frequency monitoring (hourly/daily)
+- Single marketplace monitoring
+
+#### When to Use mobile.de API
+- High-volume usage (multiple filters)
+- Continuous monitoring (5-minute intervals)
+- Production environments
+- Enterprise/commercial use
+
+#### Rate Limiting Considerations
+- **API mode**: Built-in 1-second intervals between requests
+- **Scraper mode**: Use proxy rotation for high-frequency access
+- **Recommended**: Contact mobile.de for enterprise API pricing for 5,000+ calls/day
 
 ## Practical Examples
 
