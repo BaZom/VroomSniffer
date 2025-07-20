@@ -10,7 +10,7 @@ class SchedulerService:
     """Service for scheduling and managing scraper timing"""
     
     DEFAULT_INTERVAL = 60  # Default interval in seconds
-    MIN_INTERVAL = 30      # Minimum allowed interval
+    MIN_INTERVAL = 5       # Minimum allowed interval
     MAX_INTERVAL = 3600    # Maximum allowed interval (1 hour)
     
     def __init__(self):
