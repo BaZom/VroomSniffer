@@ -36,6 +36,9 @@ class ScraperService:
         self.root_dir = Path(__file__).parent.parent
         self.use_proxy = use_proxy
         self.proxy_type = proxy_type
+        # Track consecutive proxy failures for fallback logic
+        self.consecutive_proxy_failures = 0
+        self.max_proxy_failures = 3  # After 3 failures, switch to direct mode temporarily
     
     def run_scraper_and_load_results(self, filters, build_search_url_ui, root_dir=None):
         """
@@ -87,20 +90,55 @@ class ScraperService:
             except Exception as e:
                 print(f"[IP INFO ERROR] Failed to check IP information: {str(e)}")
             
+            # Determine if we should use proxy for this attempt
+            current_use_proxy = self.use_proxy
+            current_proxy_type = self.proxy_type
+            
+            # If we've had too many consecutive proxy failures, temporarily use direct mode
+            if self.consecutive_proxy_failures >= self.max_proxy_failures:
+                if self.use_proxy:
+                    print(f"[PROXY FALLBACK] Too many proxy failures ({self.consecutive_proxy_failures}) - temporarily using direct connection")
+                current_use_proxy = False
+                current_proxy_type = None
+            
             args = [sys.executable, str(self.root_dir / "scraper" / "engine.py"), "--url", url]
             
             # Add proxy arguments if needed
-            if self.use_proxy:
+            if current_use_proxy:
                 args.append("--use-proxy")
-                if self.proxy_type:
-                    args.extend(["--proxy-type", self.proxy_type])
+                if current_proxy_type:
+                    args.extend(["--proxy-type", current_proxy_type])
             
             result = subprocess.run(
                 args,
                 cwd=self.root_dir, capture_output=True, text=True
             )
             
+            # Check for proxy failure when proxy was explicitly requested
+            if result.returncode != 0:
+                error_output = result.stderr or result.stdout
+                print(f"[ERROR] Scraper failed with return code {result.returncode}")
+                print(f"[ERROR OUTPUT] {error_output}")
+                return []
+            
             if result.returncode == 0:
+                # Check if this was a proxy failure (empty results + proxy failure message)
+                output_text = result.stdout
+                if current_use_proxy and "❌ PROXY FAILURE:" in output_text:
+                    self.consecutive_proxy_failures += 1
+                    print(f"❌ PROXY FAILURE #{self.consecutive_proxy_failures}: Proxy not working for this URL")
+                    
+                    if self.consecutive_proxy_failures < self.max_proxy_failures:
+                        print(f"[*] Will try next URL with proxy ({self.consecutive_proxy_failures}/{self.max_proxy_failures} failures)")
+                    else:
+                        print(f"[FALLBACK] Will switch to direct mode after {self.max_proxy_failures} failures")
+                    return []  # Return empty to try next URL
+                
+                # Reset failure counter on successful scrape
+                if self.consecutive_proxy_failures > 0:
+                    print(f"[SUCCESS] Proxy working again - resetting failure counter")
+                    self.consecutive_proxy_failures = 0
+                
                 json_path = self.root_dir / "storage" / "latest_results.json"
                 if json_path.exists():
                     with open(json_path, "r", encoding="utf-8") as f:

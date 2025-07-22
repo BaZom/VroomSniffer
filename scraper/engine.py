@@ -77,6 +77,18 @@ def fetch_listings_from_url(url: str, use_proxy: bool = False, proxy_manager: Op
     else:
         print(f"[DEBUG] Proxy manager already provided")
     
+    # STRICT PROXY ENFORCEMENT: If proxy explicitly requested, it MUST work
+    if use_proxy and proxy_manager:
+        print(f"[PROXY CHECK] Proxy explicitly requested - testing connection...")
+        if not proxy_manager.test_connection():
+            error_msg = f"❌ PROXY FAILURE: Proxy was explicitly requested but is not working."
+            print(error_msg)
+            print(f"[PROXY CHECK] This URL will be skipped - trying next URL or fallback to direct after multiple failures")
+            # Return empty results instead of crashing - let the service handle fallback logic
+            return [], "Unknown", False
+        else:
+            print(f"[PROXY CHECK] ✅ Proxy connection verified and working")
+    
     if proxy_manager:
         current_ip = proxy_manager.get_current_ip()
         print(f"[*] Proxy type: {proxy_manager.proxy_type.name}")

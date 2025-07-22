@@ -360,28 +360,37 @@ def run_scraper_with_url(
     """
     print(f"[*] Running scraper with URL: {url}")
     
-    # Create filters dictionary with custom_url
-    filters = {"custom_url": url}
-    
-    # Use the scraper service to run the scraper
-    listings = services.scraper_service.run_scraper_and_load_results(
-        filters,
-        build_search_url_ui=lambda x: x.get("custom_url", ""),  # Simple lambda to return the URL
-        root_dir=project_root
-    )
-    
-    if listings:
-        print(f"[+] Scraping complete! Found {len(listings)} listings.")
+    try:
+        # Create filters dictionary with custom_url
+        filters = {"custom_url": url}
         
-        # Send notifications if requested
-        if notify and listings:
-            print(f"[*] Sending notifications for top {min(notify_count, len(listings))} listings...")
-            send_top_listings(services, notify_count)
+        # Use the scraper service to run the scraper
+        listings = services.scraper_service.run_scraper_and_load_results(
+            filters,
+            build_search_url_ui=lambda x: x.get("custom_url", ""),  # Simple lambda to return the URL
+            root_dir=project_root
+        )
         
-        return True
-    else:
-        print("[!] Scraping completed but no listings found.")
-        return False
+        if listings:
+            print(f"[+] Scraping complete! Found {len(listings)} listings.")
+            
+            # Send notifications if requested
+            if notify and listings:
+                print(f"[*] Sending notifications for top {min(notify_count, len(listings))} listings...")
+                send_top_listings(services, notify_count)
+            
+            return True
+        else:
+            print("[!] Scraping completed but no listings found.")
+            return False
+            
+    except RuntimeError as e:
+        if "Proxy explicitly requested but unavailable" in str(e):
+            print(f"❌ STOPPING: {str(e)}")
+            print(f"[*] Scheduler will stop until proxy is working again")
+            return False
+        else:
+            raise  # Re-raise other runtime errors
 
 
 def run_scraper_with_url_improved(
@@ -623,9 +632,16 @@ def run_scheduler(
                     notify_count
                 )
                 
-                runs_completed = services.scheduler_service.record_scrape()
+                # If proxy was required but failed, try next URL before giving up
+                if not success:
+                    print(f"{Fore.YELLOW}[!] Scraping failed - will try next URL{Style.RESET_ALL}")
+                    # Don't increment runs_completed for failed attempts
+                    # Don't stop - just continue to next URL
+                else:
+                    runs_completed = services.scheduler_service.record_scrape()
                 
-                if runs > 0 and runs_completed >= runs:
+                # Check if we've hit max runs only on successful scrapes
+                if success and runs > 0 and runs_completed >= runs:
                     services.scheduler_service.stop_scraping()
                     break
                     
