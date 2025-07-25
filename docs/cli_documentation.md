@@ -668,6 +668,16 @@ The CLI is organized into several modules:
    - Contains helper functions used across commands
    - Includes decorators for common patterns (like progress bars)
 
+#### Scraper Utils Package
+
+- **scraper/utils/**: Modular utilities package with focused components:
+  - `anti_detection.py`: Browser stealth and fingerprinting protection
+  - `bandwidth_tracker.py`: Request monitoring and bandwidth optimization
+  - `resource_blocker.py`: Request filtering and resource blocking
+  - `page_navigator.py`: Page navigation with detection analysis
+  - `listings_finder.py`: Robust listing discovery with fallbacks
+  - `constants.py`: Configuration constants and blocking rules
+
 #### Service Layer
 
 - **ScraperService**: Handles the scraping operations

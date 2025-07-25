@@ -190,8 +190,8 @@ def show_scraper_page(all_old_path, latest_new_path, root_dir):
                 # Get direct IP for comparison (but don't show it yet)
                 direct_ip = "Unknown"
                 try:
-                    direct_response = requests.get("https://httpbin.org/ip", timeout=10)
-                    direct_ip = direct_response.json().get("origin", "Unknown")
+                    direct_response = requests.get("https://api.ipify.org", timeout=10)
+                    direct_ip = direct_response.text.strip()
                 except Exception as e:
                     print(f"[IP INFO ERROR] Failed to get direct IP: {str(e)}")
                 

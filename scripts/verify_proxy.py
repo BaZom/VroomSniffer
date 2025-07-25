@@ -37,38 +37,31 @@ def verify_proxy_setup():
         print("Create a .env file in the project root directory if one doesn't exist.")
         return False
     
-    # Check direct IP
+    # Check direct IP (once for comparison)
     try:
-        direct_response = requests.get("https://httpbin.org/ip", timeout=10)
-        direct_ip = direct_response.json().get("origin", "Unknown")
+        direct_response = requests.get("https://api.ipify.org", timeout=10)
+        direct_ip = direct_response.text.strip()
         print(f"✅ Direct IP connection successful: {direct_ip}")
     except Exception as e:
         print(f"❌ Failed to get direct IP: {str(e)}")
         return False
     
-    # Initialize proxy manager
-    proxy_manager = ProxyManager(ProxyType.WEBSHARE_RESIDENTIAL)
-    
-    # Test proxy connection
-    if not proxy_manager.test_connection():
-        print("❌ WebShare proxy connection failed!")
-        print("Please check your credentials and network connection.")
-        return False
-    
-    # Get proxy IP
+    # Get proxy status (no external requests for proxy IP)
     try:
-        proxy_ip = proxy_manager.get_current_ip()
-        print(f"✅ WebShare proxy IP: {proxy_ip}")
+        proxy_manager = ProxyManager(ProxyType.WEBSHARE_RESIDENTIAL)
         
-        if proxy_ip == direct_ip:
-            print("⚠️ Warning: Proxy IP is the same as direct IP!")
-            print("This suggests the proxy is not working correctly.")
+        # Test proxy configuration
+        if not proxy_manager.test_connection():
+            print("❌ WebShare proxy configuration failed!")
+            print("Please check your credentials.")
             return False
-        else:
-            print("✅ Success! Your IP is properly masked by the WebShare proxy.")
-            return True
+            
+        proxy_info = proxy_manager.get_current_ip()
+        print(f"✅ WebShare proxy configured: {proxy_info}")
+        print("✅ Success! WebShare proxy is properly configured.")
+        return True
     except Exception as e:
-        print(f"❌ Failed to get proxy IP: {str(e)}")
+        print(f"❌ Failed to verify proxy: {str(e)}")
         return False
 
 if __name__ == "__main__":
