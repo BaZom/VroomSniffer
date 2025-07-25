@@ -103,6 +103,40 @@ class ProxyManager:
         # Return proxy endpoint info without making external requests
         return f"{self.webshare_proxy_host}:{self.webshare_proxy_port}"
     
+    def get_actual_ip(self):
+        """
+        Get the actual external IP address being used (works with and without proxy).
+        This makes a lightweight request to detect the real IP assigned by WebShare.
+        
+        WARNING: This method makes an external API call and should only be used
+        for testing or diagnostics, NOT during regular scraping operations.
+        
+        Returns:
+            str: The actual external IP address, or error message if failed
+        """
+        try:
+            import requests
+        except ImportError:
+            return "REQUESTS_NOT_AVAILABLE"
+            
+        try:
+            # Use ipify.org for a quick IP check - lightweight and reliable
+            proxies = self.get_request_proxies()
+            response = requests.get('https://api.ipify.org', 
+                                  proxies=proxies, 
+                                  timeout=10)
+            
+            if response.status_code == 200:
+                actual_ip = response.text.strip()
+                return actual_ip
+            else:
+                return f"IP_DETECTION_FAILED_HTTP_{response.status_code}"
+                
+        except requests.exceptions.RequestException as e:
+            return f"IP_DETECTION_FAILED_{str(e)[:50]}"
+        except Exception as e:
+            return f"IP_DETECTION_ERROR_{str(e)[:50]}"
+
     @staticmethod
     def create_from_environment():
         """
