@@ -55,6 +55,11 @@ def display_url_list_improved(urls, url_pool_service=None, next_url_index=None, 
             total_listings = stats.get('total_listings', 0)
             last_run = stats.get('last_run', '')
         
+        # Get bandwidth stats if available
+        bandwidth_stats = None
+        if url_pool_service and hasattr(url_pool_service, 'storage_service'):
+            bandwidth_stats = url_pool_service.storage_service.get_bandwidth_stats_for_url(url)
+        
         # Create simple title with minimal indicator for the next URL
         title_prefix = "→ " if highlight_url else ""
         expander_title = f"{title_prefix}{i+1}. {display_url}"
@@ -72,9 +77,8 @@ def display_url_list_improved(urls, url_pool_service=None, next_url_index=None, 
                 key=f"desc_{i}_{url[-10:]}"
             )
             
-            # Use a horizontal layout for buttons - avoiding nested columns
-            # Instead of nesting columns, use one row of columns for all buttons
-            btn1, btn2, btn3, stats1, stats2 = st.columns([1.2, 1.2, 1.2, 0.8, 0.8])
+            # Use a horizontal layout for buttons and stats
+            btn1, btn2, btn3, stats1, stats2, stats3 = st.columns([1.2, 1.2, 1.2, 0.8, 0.8, 0.8])
             
             with btn1:
                 if st.button("💾 Save Description", key=f"save_{i}_{url[-10:]}", help="Save the description for this URL"):
@@ -104,7 +108,16 @@ def display_url_list_improved(urls, url_pool_service=None, next_url_index=None, 
             with stats2:
                 st.metric("New", total_listings, help="Total count of unique new listings found")
                 
+            with stats3:
+                if bandwidth_stats:
+                    st.metric("BW", f"{bandwidth_stats['latest_bandwidth_kb']} KB", 
+                             help=f"Bandwidth: Avg {bandwidth_stats['average_bandwidth_kb']} KB, Efficiency {bandwidth_stats['latest_efficiency']}%")
+                else:
+                    st.metric("BW", "N/A", help="No bandwidth data available")
+                
             if last_run:
                 st.caption(f"Last run: {last_run}")
+            if bandwidth_stats:
+                st.caption(f"Efficiency: {bandwidth_stats['latest_efficiency']}% blocked, {bandwidth_stats['total_scrapes']} scrapes")
     
     return modified, removed_index

@@ -14,6 +14,7 @@ class StorageService:
         self.all_old_path = all_old_path or str(Path(__file__).parent.parent / "storage" / "all_old_results.json")
         self.latest_new_path = latest_new_path or str(Path(__file__).parent.parent / "storage" / "latest_new_results.json")
         self.ip_tracking_path = str(Path(__file__).parent.parent / "storage" / "ip_tracking.json")
+        self.bandwidth_tracking_path = str(Path(__file__).parent.parent / "storage" / "bandwidth_tracking.json")
     
     def load_cache(self, cache_path=None):
         """
@@ -429,3 +430,99 @@ class StorageService:
             return {"url_ip_mapping": {}, "last_updated": ""}
         except (json.JSONDecodeError, Exception):
             return {"url_ip_mapping": {}, "last_updated": ""}
+    
+    def track_bandwidth_for_url(self, url, bandwidth_kb, requests_allowed, requests_blocked, is_proxy=False):
+        """
+        Track bandwidth usage for a specific URL
+        
+        Args:
+            url: The URL being accessed
+            bandwidth_kb: Bandwidth used in KB
+            requests_allowed: Number of requests allowed
+            requests_blocked: Number of requests blocked
+            is_proxy: Whether proxy was used
+        """
+        path = self.bandwidth_tracking_path
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        
+        # Load existing data or create new structure
+        try:
+            if Path(path).exists():
+                with open(path, "r", encoding="utf-8") as f:
+                    tracking_data = json.load(f)
+            else:
+                tracking_data = {"url_bandwidth_mapping": {}}
+        except json.JSONDecodeError:
+            tracking_data = {"url_bandwidth_mapping": {}}
+        
+        # Ensure url_bandwidth_mapping exists
+        if "url_bandwidth_mapping" not in tracking_data:
+            tracking_data["url_bandwidth_mapping"] = {}
+        
+        # Add or update the entry for this URL
+        if url not in tracking_data["url_bandwidth_mapping"]:
+            tracking_data["url_bandwidth_mapping"][url] = []
+        
+        # Add new bandwidth entry with timestamp
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        efficiency = (requests_blocked / (requests_allowed + requests_blocked) * 100) if (requests_allowed + requests_blocked) > 0 else 0
+        
+        entry = {
+            "timestamp": timestamp,
+            "bandwidth_kb": bandwidth_kb,
+            "requests_allowed": requests_allowed,
+            "requests_blocked": requests_blocked,
+            "efficiency_percent": round(efficiency, 1),
+            "is_proxy": is_proxy
+        }
+        
+        tracking_data["url_bandwidth_mapping"][url].append(entry)
+        
+        # Keep only last 10 entries per URL to avoid file bloat
+        if len(tracking_data["url_bandwidth_mapping"][url]) > 10:
+            tracking_data["url_bandwidth_mapping"][url] = tracking_data["url_bandwidth_mapping"][url][-10:]
+        
+        # Save updated data
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(tracking_data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"[!] Warning: Could not save bandwidth tracking: {e}")
+    
+    def get_bandwidth_stats_for_url(self, url):
+        """
+        Get bandwidth statistics for a specific URL
+        
+        Args:
+            url: The URL to get stats for
+            
+        Returns:
+            dict: Bandwidth statistics or None if no data
+        """
+        path = self.bandwidth_tracking_path
+        
+        try:
+            if Path(path).exists():
+                with open(path, "r", encoding="utf-8") as f:
+                    tracking_data = json.load(f)
+                    
+                url_data = tracking_data.get("url_bandwidth_mapping", {}).get(url, [])
+                if url_data:
+                    latest = url_data[-1]  # Get most recent entry
+                    avg_bandwidth = sum(entry["bandwidth_kb"] for entry in url_data) / len(url_data)
+                    avg_efficiency = sum(entry["efficiency_percent"] for entry in url_data) / len(url_data)
+                    
+                    return {
+                        "latest_bandwidth_kb": latest["bandwidth_kb"],
+                        "latest_efficiency": latest["efficiency_percent"],
+                        "average_bandwidth_kb": round(avg_bandwidth, 2),
+                        "average_efficiency": round(avg_efficiency, 1),
+                        "total_scrapes": len(url_data),
+                        "last_scraped": latest["timestamp"]
+                    }
+        except Exception:
+            pass
+        
+        return None

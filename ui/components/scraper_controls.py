@@ -107,7 +107,7 @@ def display_scraper_controls(scheduler_service):
             min_value=scheduler_service.MIN_INTERVAL, 
             max_value=scheduler_service.MAX_INTERVAL, 
             value=prev_interval,
-            step=30
+            step=5
         )
         
         if interval != prev_interval:

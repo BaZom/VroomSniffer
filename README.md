@@ -78,7 +78,7 @@ python cli/main.py list
 
 **Launch web interface:**
 ```bash
-streamlit run ui/pages/scraper.py
+streamlit run ui/streamlit_app.py
 ```
 
 ## Configuration
@@ -91,8 +91,48 @@ VroomSniffer uses environment variables for configuration. An example file `.env
    ```
 
 2. **Edit the .env file** with your specific settings:
-   - For Telegram notifications, set your bot token and chat ID
+   - For Telegram notifications, set your bot token and chat ID (see detailed setup below)
    - For proxy support, configure your WebShare credentials
+
+### Telegram Setup Instructions
+
+To enable Telegram notifications, you need to create a Telegram bot and get your chat ID:
+
+#### 1. Create a Telegram Bot
+1. Open Telegram and search for `@BotFather`
+2. Start a chat with BotFather and send `/newbot`
+3. Follow the instructions to create your bot
+4. Copy the bot token (e.g., `123456789:ABCdef...`)
+
+#### 2. Get Your Chat ID
+**For personal messages:**
+1. Send a message to your bot (any message)
+2. Visit this URL in your browser (replace `<YOUR_BOT_TOKEN>` with your actual token):
+   ```
+   https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates
+   ```
+3. Look for `"chat":{"id":<CHAT_ID>}` in the JSON response
+4. Copy the chat ID number
+
+**For group notifications:**
+1. Add your bot to the group
+2. Send a message in the group (mention the bot or any message)
+3. Visit the same getUpdates URL as above
+4. Look for the group chat ID (it will be a negative number like `-123456789`)
+5. Use this negative ID as your chat ID
+
+**For channel notifications:**
+1. Add your bot to the channel as an administrator
+2. Post a message in the channel
+3. Visit the getUpdates URL
+4. Use the channel's negative ID
+
+#### 3. Configure Environment Variables
+Add these to your `.env` file:
+```
+TELEGRAM_BOT_TOKEN=your_bot_token_here
+TELEGRAM_CHAT_ID=your_chat_id_here
+```
 
 3. **Test your setup**:
    ```bash

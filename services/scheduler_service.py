@@ -10,7 +10,7 @@ class SchedulerService:
     """Service for scheduling and managing scraper timing"""
     
     DEFAULT_INTERVAL = 60  # Default interval in seconds
-    MIN_INTERVAL = 30      # Minimum allowed interval
+    MIN_INTERVAL = 0       # Minimum allowed interval
     MAX_INTERVAL = 3600    # Maximum allowed interval (1 hour)
     
     def __init__(self):
@@ -21,6 +21,9 @@ class SchedulerService:
         self.next_url_index = 0
         self.next_url_selected = False
         self.total_runs = 0
+        # New shuffled URL tracking for fair random selection
+        self.shuffled_indices = []
+        self.current_shuffle_position = 0
     
     def set_interval(self, seconds):
         """
@@ -171,7 +174,7 @@ class SchedulerService:
         
     def select_next_url_index(self, url_count, random_selection=True, current_run=None):
         """
-        Select the next URL index to scrape
+        Select the next URL index to scrape with improved fair random selection
         
         Args:
             url_count: Number of URLs in the pool
@@ -186,13 +189,23 @@ class SchedulerService:
         elif url_count == 1:
             self.next_url_index = 0
         elif random_selection:
-            # Pick a random URL, but avoid picking the same one twice in a row
-            current = self.next_url_index
-            self.next_url_index = random.randint(0, url_count - 1)
+            # New approach: Fair random selection ensuring all URLs are used once before repeating
+            if not self.shuffled_indices or self.current_shuffle_position >= len(self.shuffled_indices):
+                # Create shuffled list of all URL indices
+                self.shuffled_indices = list(range(url_count))
+                random.shuffle(self.shuffled_indices)
+                self.current_shuffle_position = 0
+                print(f"[SHUFFLE] New randomized URL order: {[i+1 for i in self.shuffled_indices]}")
             
-            # If we got the same index and there are multiple URLs, try once more
-            if self.next_url_index == current and url_count > 1:
-                self.next_url_index = random.randint(0, url_count - 1)
+            # Pick next URL from shuffled list
+            self.next_url_index = self.shuffled_indices[self.current_shuffle_position]
+            self.current_shuffle_position += 1
+            
+            # Progress tracking
+            progress = f"({self.current_shuffle_position}/{url_count})"
+            remaining_in_round = url_count - self.current_shuffle_position
+            print(f"[FAIR RANDOM] Selected URL index {self.next_url_index + 1} {progress} - {remaining_in_round} URLs left in this round")
+            
         else:
             # Sequential selection based on run number
             if current_run is not None:
