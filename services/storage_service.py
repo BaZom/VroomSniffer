@@ -534,7 +534,7 @@ class StorageService:
         
         Args:
             url: The URL being accessed
-            ip: The IP address used
+            ip: The IP address used (generic identifier like "WEBSHARE_RESIDENTIAL_PROXY")
             is_proxy: Whether this IP is a proxy IP
             detection_type: Type of detection ('captcha', 'blocked', 'normal', 'warning')
             page_title: Page title for detection analysis
@@ -549,7 +549,9 @@ class StorageService:
         
         # Handle detection events in separate detection_events.json
         if detection_type and detection_type != 'normal':
-            self._track_detection_event_separate(url, ip, is_proxy, detection_type, page_title, 
+            # Get real IP for detection events only
+            real_ip = self._get_real_ip_for_detection_event(ip, is_proxy)
+            self._track_detection_event_separate(url, real_ip, is_proxy, detection_type, page_title, 
                                                success, listings_found, response_time, trigger_indicator)
     
     def _track_ip_mapping(self, url, ip, is_proxy, success, listings_found, ip_tracking_path=None):
@@ -649,3 +651,35 @@ class StorageService:
         # Save detection events
         with open(self.detection_events_path, "w", encoding="utf-8") as f:
             json.dump(events_data, f, ensure_ascii=False, indent=2)
+    
+    def _get_real_ip_for_detection_event(self, original_ip, is_proxy):
+        """Get real IP address for detection events only"""
+        try:
+            print(f"[*] Getting real IP for detection event (was: {original_ip})...")
+            
+            # Import proxy manager to get real IP
+            from proxy.manager import ProxyManager
+            
+            # Try to get real IP using proxy manager's method
+            if is_proxy:
+                # For proxy connections, create a proxy manager instance to get actual IP
+                proxy_manager = ProxyManager.create_from_environment()
+                if proxy_manager:
+                    real_ip = proxy_manager.get_actual_ip()
+                    if real_ip and real_ip != "Unknown":
+                        print(f"[*] Real IP for detection event: {real_ip}")
+                        return real_ip
+            else:
+                # For direct connections, use static method to get IP
+                real_ip = ProxyManager.get_current_ip()
+                if real_ip and real_ip != "Unknown":
+                    print(f"[*] Real IP for detection event: {real_ip}")
+                    return real_ip
+            
+            # Fallback to original identifier if real IP cannot be obtained
+            print(f"[WARNING] Could not get real IP, using identifier: {original_ip}")
+            return original_ip
+            
+        except Exception as e:
+            print(f"[WARNING] Error getting real IP for detection event: {str(e)}")
+            return original_ip
