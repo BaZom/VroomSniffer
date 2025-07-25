@@ -24,7 +24,7 @@ BLOCKED_RESOURCE_TYPES = [
 # Essential CSS to ALLOW (minimal whitelist) - BLOCK ALL CSS for maximum bandwidth savings
 ESSENTIAL_RESOURCES = [
     # Block ALL CSS - we only need HTML content for scraping
-    # 'kleinanzeigen.de/static/css/all.css',  # DISABLED - this is 440 KB!
+    # 'marketplace.com/static/css/all.css',  # DISABLED - typically large files
 ]
 
 # ULTRA-AGGRESSIVE URL blocking 
@@ -39,11 +39,11 @@ BLOCKED_URL_KEYWORDS = [
     'criteo.com', 'outbrain.com', 'taboola.com', 'adform.net', 'rubiconproject.com', 'pubmatic.com',
     'openx.net', 'bidswitch.net', 'mathtag.com', 'scorecardresearch.com', 'moatads.com', 'casalemedia.com',
     'adition.com', 'bidr.io', 'adscale.de', 'adspirit.de', 'adserver', 'adclick', 'banner', 'promo',
-    # eBay Kleinanzeigen specific tracking and ads (ENHANCED)
+    # Common marketplace tracking and ads (ENHANCED)
     'trackjs.com', 'speedcurve.com', 'hotjar.com', 'cdn-cgi', 'mouseflow', 'amplitude',
     'cloudflareinsights.com', 'cdn.jsdelivr.net/npm/hotjar', 'cdn.segment.com', 'cdn.optimizely.com',
     'cdn.mouseflow.com', 'cdn.amplitude.com', 'cdn.plausible.io', 'cdn.matomo.cloud', 'cdn.datadoghq.com',
-    # eBay Kleinanzeigen ad-block detection and tracking scripts
+    # Common ad-block detection and tracking scripts
     'adblock-detection', 'ads.obj', 'prebid', 'gdpr/api/consent', 'liberty-js', 'liberty-experimental',
     # Analytics and data collection (EXTENSIVE)
     'collect?v=2', 'server.sgtm', 'tracking/', 'analytics', 'telemetry', 'metrics',
@@ -158,9 +158,21 @@ class BandwidthTracker:
         """Check if response_url is likely a redirect from original_url"""
         try:
             # Handle common redirect patterns
-            if 'ebay-kleinanzeigen.de' in original_url and 'kleinanzeigen.de' in response_url:
-                return True
-            # Add more redirect patterns as needed
+            # Example: 'example-marketplace.com' to 'marketplace.com'
+            from urllib.parse import urlparse
+            orig_domain = urlparse(original_url).netloc.lower()
+            resp_domain = urlparse(response_url).netloc.lower()
+            
+            # Check if it's a subdomain to main domain redirect
+            if orig_domain != resp_domain:
+                # Extract root domain for comparison
+                orig_parts = orig_domain.split('.')
+                resp_parts = resp_domain.split('.')
+                if len(orig_parts) >= 2 and len(resp_parts) >= 2:
+                    orig_root = '.'.join(orig_parts[-2:])
+                    resp_root = '.'.join(resp_parts[-2:])
+                    return orig_root == resp_root
+            
             return False
         except Exception:
             return False
@@ -348,7 +360,7 @@ class PageNavigator:
                 if self.page.locator(selector).is_visible(timeout=2000):
                     print(f"[!] No results found for this search")
                     return True
-            except:
+            except Exception:
                 continue
         
         return False
@@ -357,7 +369,6 @@ class PageNavigator:
         """Print debug information about the page content"""
         try:
             title = self.page.title()
-            print(f"[DEBUG] Page title: {title}")
             
             # Check if we've been blocked or got a CAPTCHA
             if "captcha" in title.lower() or "blocked" in title.lower():
@@ -367,28 +378,13 @@ class PageNavigator:
             # Check if page contains expected content
             content = self.page.content()
             if "Autos" in content and "von" in content:
-                print("[DEBUG] Page contains car listings content")
-                
-                # Debug article elements
-                all_article_elements = self.page.query_selector_all("article")
-                print(f"[DEBUG] Found {len(all_article_elements)} article elements")
-                
-                # Sample first few articles
-                for i, article in enumerate(all_article_elements[:3]):
-                    try:
-                        text = article.inner_text()[:100]
-                        print(f"[DEBUG] Article {i+1}: {text}")
-                    except:
-                        print(f"[DEBUG] Article {i+1}: Could not get text")
-                
-                # Check for price elements
-                price_elements = self.page.query_selector_all("*:has-text('€')")
-                print(f"[DEBUG] Found {len(price_elements)} elements with €")
+                # Basic content validation passed
+                pass
             else:
-                print("[DEBUG] Page does not contain expected car listings content")
+                print("[WARNING] Page does not contain expected car listings content")
                 
         except Exception as e:
-            print(f"[DEBUG] Could not get page title: {str(e)}")
+            print(f"[WARNING] Could not analyze page content: {str(e)}")
 
 
 class ListingsFinder:
@@ -408,7 +404,7 @@ class ListingsFinder:
             if listings:
                 print(f"[*] Found {len(listings)} listings")
                 return listings
-        except:
+        except Exception:
             print(f"[!] No listings found with .aditem selector, trying alternatives...")
         
         # Alternative selectors
@@ -426,7 +422,7 @@ class ListingsFinder:
                 if listings:
                     print(f"[*] Found {len(listings)} listings with selector: {selector}")
                     return listings
-            except:
+            except Exception:
                 continue
         
         if not listings:

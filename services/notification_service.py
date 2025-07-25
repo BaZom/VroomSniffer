@@ -89,7 +89,7 @@ class NotificationService:
                                 retry_wait = retry_after + 2
                                 should_retry = True
                                 print(f"[*] Hit Telegram rate limit (string). Waiting {retry_wait} seconds before retry...")
-                        except:
+                        except Exception:
                             # Fallback to default wait time
                             retry_wait = 30
                             should_retry = True

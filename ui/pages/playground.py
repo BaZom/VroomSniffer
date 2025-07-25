@@ -169,5 +169,3 @@ def show_playground_page(all_old_path, latest_new_path, root_dir):
                     st.success("✅ Alert test sent!")
                 except Exception as e:
                     st.error(f"❌ Failed: {str(e)}")
-
-    # ...existing code...

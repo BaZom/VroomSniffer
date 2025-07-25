@@ -3,6 +3,7 @@ ScraperService - Handles running the scraper and processing results.
 Responsible for executing the scraper and managing its results.
 """
 import sys
+import os
 import json
 import subprocess
 from pathlib import Path
@@ -39,6 +40,36 @@ class ScraperService:
         # Track consecutive proxy failures for fallback logic
         self.consecutive_proxy_failures = 0
         self.max_proxy_failures = 3  # After 3 failures, switch to direct mode temporarily
+        
+        # Check IP only once at initialization, not on every scraping iteration
+        self.direct_ip = self._check_direct_ip_once()
+        if self.use_proxy:
+            print(f"[IP INFO] Startup IP: {self.direct_ip} (will use proxy for scraping)")
+        else:
+            print(f"[IP INFO] Startup IP: {self.direct_ip} (will use direct connection)")
+    
+    def _check_direct_ip_once(self):
+        """Check direct IP only once at service initialization"""
+        # Try multiple IP detection services in case httpbin.org has 503 issues
+        ip_services = [
+            ("https://api.ipify.org", lambda r: r.text.strip()),
+            ("https://icanhazip.com", lambda r: r.text.strip()),
+            ("https://httpbin.org/ip", lambda r: r.json().get("origin", "Unknown"))
+        ]
+        
+        for service_url, parser in ip_services:
+            try:
+                import requests
+                response = requests.get(service_url, timeout=5)
+                if response.status_code == 200:
+                    ip = parser(response)
+                    if ip and ip != "Unknown":
+                        return ip
+            except Exception as e:
+                continue
+        
+        print(f"[IP INFO ERROR] All IP detection services failed")
+        return "Unknown"
     
     def run_scraper_and_load_results(self, filters, build_search_url_ui, root_dir=None):
         """
@@ -59,36 +90,20 @@ class ScraperService:
         try:
             if filters and filters.get("custom_url"):
                 url = filters["custom_url"]
-                print(f"[DEBUG] Using custom URL: {url}")
             else:
                 url = build_search_url_ui(filters)
-                print(f"[DEBUG] Generated URL from filters: {url}")
-                print(f"[DEBUG] Filters used: {filters}")
                 
             # Check IP before scraping if using proxy
-            direct_ip = "Unknown"
             proxy_ip = None
             proxy_manager = None
             proxy_type = None
             
             # Import necessary modules here to avoid circular imports
-            import requests
-            from proxy.manager import ProxyManager, ProxyType                # Create a proxy manager and get direct IP only
-            try:
-                # Get direct IP regardless of proxy settings - we'll get actual proxy IP after scraping
-                try:
-                    direct_response = requests.get("https://httpbin.org/ip", timeout=10)
-                    direct_ip = direct_response.json().get("origin", "Unknown")
-                    print(f"[IP INFO] Your direct IP: {direct_ip}")
-                except Exception as e:
-                    print(f"[IP INFO ERROR] Failed to get direct IP: {str(e)}")
-                    direct_ip = "Unknown"
-                
-                # Log proxy usage intent but don't check proxy IP yet to avoid confusion
-                if self.use_proxy and self.proxy_type == "WEBSHARE_RESIDENTIAL":
-                    print(f"[IP INFO] Will use WebShare residential proxy for scraping")
-            except Exception as e:
-                print(f"[IP INFO ERROR] Failed to check IP information: {str(e)}")
+            from proxy.manager import ProxyManager, ProxyType
+            
+            # Log proxy usage intent (IP was already checked at initialization)
+            if self.use_proxy and self.proxy_type == "WEBSHARE_RESIDENTIAL":
+                print(f"[IP INFO] Will use WebShare residential proxy for scraping")
             
             # Determine if we should use proxy for this attempt
             current_use_proxy = self.use_proxy
@@ -111,7 +126,8 @@ class ScraperService:
             
             result = subprocess.run(
                 args,
-                cwd=self.root_dir, capture_output=True, text=True
+                cwd=self.root_dir, capture_output=True, text=True,
+                env=os.environ.copy()
             )
             
             # Check for proxy failure when proxy was explicitly requested
@@ -156,43 +172,48 @@ class ScraperService:
                 requests_allowed = None
                 requests_blocked = None
                 
-                # Look for the actual IP, proxy status, and bandwidth info in the scraper's output
-                output_lines = result.stdout.split("\n")
-                for line in output_lines:
-                    if "[*] Scraping completed using IP:" in line:
-                        parts = line.split("using IP:")
-                        if len(parts) > 1:
-                            actual_ip = parts[1].strip()
-                    elif "[*] Used proxy:" in line:
-                        if "Yes" in line:
-                            is_proxy = True
-                    elif "📊 Data transferred:" in line:
-                        # Extract bandwidth info: "📊 Data transferred: 68.36 KB (0.067 MB)"
-                        try:
-                            parts = line.split(":")
+                # Parse output from engine
+                if result.stdout:
+                    # Look for the actual IP, proxy status, and bandwidth info in the scraper's output
+                    output_lines = result.stdout.split("\n")
+                    for line in output_lines:
+                        if "[*] Scraping completed using IP:" in line:
+                            parts = line.split("using IP:")
                             if len(parts) > 1:
-                                bandwidth_part = parts[1].strip()
-                                if "KB" in bandwidth_part:
-                                    bandwidth_kb = float(bandwidth_part.split("KB")[0].strip())
-                        except:
-                            pass
-                    elif "📈 Requests:" in line:
-                        # Extract request info: "📈 Requests: 2 allowed, 56 blocked"
-                        try:
-                            parts = line.split(":")
-                            if len(parts) > 1:
-                                requests_part = parts[1].strip()
-                                if "allowed" in requests_part and "blocked" in requests_part:
-                                    allowed_part = requests_part.split("allowed")[0].strip()
-                                    blocked_part = requests_part.split("blocked")[0].split(",")[-1].strip()
-                                    requests_allowed = int(allowed_part)
-                                    requests_blocked = int(blocked_part)
-                        except:
-                            pass
+                                actual_ip = parts[1].strip()
+                        elif "[*] Used proxy:" in line:
+                            if "Yes" in line:
+                                is_proxy = True
+                        elif "📊 Data transferred:" in line:
+                            # Extract bandwidth info: "📊 Data transferred: 68.36 KB (0.067 MB)"
+                            try:
+                                parts = line.split(":")
+                                if len(parts) > 1:
+                                    bandwidth_part = parts[1].strip()
+                                    if "KB" in bandwidth_part:
+                                        bandwidth_kb = float(bandwidth_part.split("KB")[0].strip())
+                            except Exception:
+                                pass
+                        elif "📈 Requests:" in line:
+                            # Extract request info: "📈 Requests: 2 allowed, 56 blocked"
+                            try:
+                                parts = line.split(":")
+                                if len(parts) > 1:
+                                    requests_part = parts[1].strip()
+                                    if "allowed" in requests_part and "blocked" in requests_part:
+                                        allowed_part = requests_part.split("allowed")[0].strip()
+                                        blocked_part = requests_part.split("blocked")[0].split(",")[-1].strip()
+                                        requests_allowed = int(allowed_part)
+                                        requests_blocked = int(blocked_part)
+                            except Exception:
+                                pass
                 
                 # If we couldn't find the IP in output, use direct_ip as fallback
                 if not actual_ip:
-                    actual_ip = direct_ip
+                    actual_ip = self.direct_ip
+                # If scraper returned DIRECT_CONNECTION placeholder, use our startup IP
+                elif actual_ip == "DIRECT_CONNECTION":
+                    actual_ip = self.direct_ip
                     
                 # Display bandwidth information if available
                 if bandwidth_kb is not None:
@@ -332,3 +353,9 @@ class ScraperService:
             progress_callback("complete", f"Found {len(all_listings)} listings ({len(new_listings)} new)", 1.0)
         
         return all_listings, new_listings
+    
+    def reset_proxy_failure_counter(self):
+        """Reset proxy failure counter - called when starting new shuffle round"""
+        if self.consecutive_proxy_failures > 0:
+            print(f"[SHUFFLE] Resetting proxy failure counter (was {self.consecutive_proxy_failures})")
+            self.consecutive_proxy_failures = 0

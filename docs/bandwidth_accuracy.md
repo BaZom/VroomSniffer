@@ -28,7 +28,7 @@ size_estimates = {
 
 The calculations are consistent because:
 
-1. **Same Website Structure**: eBay Kleinanzeigen has consistent resource patterns
+1. **Same Website Structure**: Car marketplace sites have consistent resource patterns
 2. **Predictable Resource Counts**: Each page loads similar numbers of images (~41), scripts (~26), etc.
 3. **Conservative Estimates**: Size estimates are based on real-world measurements
 4. **Exact Block Counts**: We track exactly what gets blocked vs. allowed
@@ -44,7 +44,7 @@ The calculations are consistent because:
 
 The estimates have been validated against:
 - Manual bandwidth monitoring during development
-- Typical eBay Kleinanzeigen page sizes
+- Typical car marketplace page sizes
 - Conservative sizing to avoid underestimating usage
 
 ### Limitations

@@ -43,7 +43,7 @@ def main():
         # Add VroomSniffer logo
         try:
             st.image("ui/resources/logo6.png", width=200)
-        except:
+        except Exception:
             # Fallback if logo not found
             st.title("VroomSniffer")
         

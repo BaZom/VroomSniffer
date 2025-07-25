@@ -35,7 +35,7 @@ class BandwidthTest:
     """Test class for bandwidth optimization validation"""
     
     def __init__(self):
-        self.test_url = "https://www.ebay-kleinanzeigen.de/s-autos/c216"
+        self.test_url = "https://www.example-marketplace.com/s-autos/c216"  # Generic marketplace URL
         self.use_proxy = True
         self.proxy_manager = None
         self.results = {}

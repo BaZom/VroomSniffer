@@ -441,7 +441,7 @@ def _run_scraper_with_urls_with_progress(
     Returns:
         bool: True if successful, False otherwise
     """
-    # Import colored output functions and progress bar
+    # Import colored output functions and progress bar first
     from cli.utils import print_info, print_warning, print_error, print_success, print_progress_bar
     from colorama import Fore, Style
     
@@ -575,6 +575,7 @@ def run_scheduler(
         random_selection: Whether to select URLs randomly
         notify_new: Whether to notify about new listings
         notify_count: Number of listings to send notifications for
+        check_ip_rotation: Check IP rotation for proxy verification
     """
     try:
         # Set up scheduler
@@ -612,6 +613,13 @@ def run_scheduler(
             if services.scheduler_service.is_time_to_scrape():
                 runs_remaining = "unlimited" if runs == 0 else str(runs)
                 print(f"\n{Fore.CYAN}[*] Run {runs_completed + 1}/{runs_remaining}{Style.RESET_ALL}")
+                
+                # Check if this will start a new shuffle round and reset proxy failures
+                if (random_selection and 
+                    (not hasattr(services.scheduler_service, 'shuffled_indices') or 
+                     not services.scheduler_service.shuffled_indices or
+                     services.scheduler_service.current_shuffle_position >= len(services.scheduler_service.shuffled_indices))):
+                    services.scraper_service.reset_proxy_failure_counter()
                 
                 # Use scheduler service for URL selection
                 url_index = services.scheduler_service.select_next_url_index(

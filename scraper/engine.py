@@ -1,16 +1,18 @@
-# Generic Car Marketplace Scraper Engine
 # --------------------------------------
+# Car Marketplace Scraper Engine
 # Uses Playwright to fetch dynamic content from various car marketplace websites.
 # Adaptable to different platforms through dynamic URL construction.
+# --------------------------------------
 
-from playwright.sync_api import sync_playwright
-import json
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
-from urllib.parse import urlparse
 from typing import List, Tuple, Optional
+from urllib.parse import urlparse
+
+from playwright.sync_api import sync_playwright
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
@@ -18,6 +20,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from notifier.telegram import send_telegram_message, format_car_listing_message
 from proxy.manager import ProxyManager, ProxyType
 from scraper.utils import ResourceBlocker, AntiDetection, PageNavigator, ListingsFinder
+
 
 def parse_listing(item, base_url=""):
     """Parse a single listing element into a structured format"""
@@ -37,6 +40,7 @@ def parse_listing(item, base_url=""):
                 url_full = f"{base_url}{link_suffix}"
         else:
             url_full = link_suffix or ""
+            
         return {
             "Title": title,
             "Price": price,
@@ -69,30 +73,27 @@ def fetch_listings_from_url(url: str, use_proxy: bool = False, proxy_manager: Op
     # Setup proxy if needed
     current_ip = "Unknown"
     if use_proxy and proxy_manager is None:
-        print(f"[DEBUG] Creating proxy manager from environment...")
         proxy_manager = ProxyManager.create_from_environment()
-        print(f"[DEBUG] Created proxy manager with type: {proxy_manager.proxy_type.name}")
-    elif not use_proxy:
-        print(f"[DEBUG] Proxy not requested (use_proxy=False)")
-    else:
-        print(f"[DEBUG] Proxy manager already provided")
     
     # STRICT PROXY ENFORCEMENT: If proxy explicitly requested, it MUST work
     if use_proxy and proxy_manager:
-        print(f"[PROXY CHECK] Proxy explicitly requested - testing connection...")
+        print("[PROXY CHECK] Proxy explicitly requested - testing connection...")
         if not proxy_manager.test_connection():
-            error_msg = f"❌ PROXY FAILURE: Proxy was explicitly requested but is not working."
-            print(error_msg)
-            print(f"[PROXY CHECK] This URL will be skipped - trying next URL or fallback to direct after multiple failures")
-            # Return empty results instead of crashing - let the service handle fallback logic
-            return [], "Unknown", False
+            print("❌ PROXY FAILURE: Proxy was explicitly requested but is not working.")
+            print("[PROXY CHECK] This URL will be skipped - trying next URL or fallback to direct after multiple failures")
+            return [], current_ip, False
         else:
-            print(f"[PROXY CHECK] ✅ Proxy connection verified and working")
+            print("[PROXY CHECK] ✅ Proxy connection verified and working")
     
     if proxy_manager:
         current_ip = proxy_manager.get_current_ip()
         print(f"[*] Proxy type: {proxy_manager.proxy_type.name}")
         print(f"[*] Detected IP: {current_ip}")
+    else:
+        # For direct connections, use a placeholder - the actual IP tracking 
+        # will be done by the scraper service using its startup IP
+        current_ip = "DIRECT_CONNECTION"
+        print("[*] Direct connection mode")
     
     # Initialize resource blocker for bandwidth optimization
     resource_blocker = ResourceBlocker()
@@ -192,7 +193,7 @@ def fetch_listings_from_url(url: str, use_proxy: bool = False, proxy_manager: Op
             # Parse listings
             parsed_listings = []
             if listings:
-                for item in listings:
+                for i, item in enumerate(listings):
                     parsed_listing = parse_listing(item, base_url)
                     if parsed_listing:
                         parsed_listings.append(parsed_listing)
@@ -220,8 +221,8 @@ def fetch_listings_from_url(url: str, use_proxy: bool = False, proxy_manager: Op
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--url", type=str, required=True)
+    parser = argparse.ArgumentParser(description="Car marketplace scraper engine")
+    parser.add_argument("--url", type=str, required=True, help="Marketplace URL to scrape")
     parser.add_argument("--notify", action="store_true", help="Send Telegram notifications for new listings")
     parser.add_argument("--notify-count", type=int, default=5, help="Number of top listings to notify (default: 5)")
     parser.add_argument("--use-proxy", action="store_true", help="Use proxy configuration from environment")
@@ -229,14 +230,13 @@ if __name__ == "__main__":
                         default="NONE", help="Type of proxy to use")
     args = parser.parse_args()
     
-    # Always use ultra-aggressive bandwidth optimization (target: ~37 KB per scrape)
-    print(f"[*] Bandwidth optimization: MAXIMUM AGGRESSION - blocking ALL non-essential resources including CSS")
-    print(f"[*] Expected bandwidth reduction: 95%+ compared to normal browsing (target: ~37 KB per scrape)")
+    # Bandwidth optimization info
+    print("[*] Bandwidth optimization: MAXIMUM AGGRESSION - blocking ALL non-essential resources including CSS")
+    print("[*] Expected bandwidth reduction: 95%+ compared to normal browsing (target: ~37 KB per scrape)")
     
-    # Set up proxy manager without redundant IP checks
+    # Set up proxy manager
     proxy_manager = None
     try:
-        # Set up proxy if requested - silently without logging
         if args.use_proxy:
             proxy_manager = ProxyManager.create_from_environment()
             print(f"[*] Using proxy from environment: {proxy_manager.proxy_type.name}")
@@ -246,16 +246,18 @@ if __name__ == "__main__":
         else:
             print("[*] Not using proxy - requests will use your direct IP address.")
     except Exception as e:
-        print(f"[!] Error setting up proxy: {str(e)}")
+        print(f"[!] Error setting up proxy: {e}")
         print("[!] Will continue with scraping, but proxy may not be available.")
     
+    # Run scraper
     listings, used_ip, is_proxy_used = fetch_listings_from_url(args.url, args.use_proxy, proxy_manager)
+    
     # Save results
     with open("storage/latest_results.json", "w", encoding="utf-8") as f:
         json.dump(listings, f, ensure_ascii=False, indent=2)
     print(f"[+] Wrote {len(listings)} listings to storage/latest_results.json")
     
-    # Make the IP information very clear and easy to parse
+    # IP information for service parsing
     print(f"[*] Scraping completed using IP: {used_ip}")
     print(f"[*] Used proxy: {'Yes' if is_proxy_used else 'No'}")
     print(f"[*] ACTUAL_IP_USED: {used_ip} via {'proxy' if is_proxy_used else 'direct connection'}")
