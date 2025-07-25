@@ -358,7 +358,6 @@ def run_scraper_with_url(
     Returns:
         bool: True if successful, False otherwise
     """
-    print(f"[*] Running scraper with URL: {url}")
     
     try:
         # Create filters dictionary with custom_url

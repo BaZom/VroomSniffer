@@ -315,7 +315,7 @@ class PageNavigator:
     def __init__(self, page: Page):
         self.page = page
     
-    def navigate_to_url(self, url: str, timeout: int = 40000) -> bool:
+    def navigate_to_url(self, url: str, timeout: int = 10000) -> bool:
         """Navigate to URL with robust error handling"""
         print(f"[*] Navigating to marketplace search page: {url}")
         
@@ -324,9 +324,9 @@ class PageNavigator:
             self.page.goto(url, wait_until="domcontentloaded", timeout=timeout)
             print("[*] Page initial DOM loaded, waiting for content...")
             
-            # Then wait for network to quiet down
+            # Then wait for network to quiet down (reduced timeout)
             try:
-                self.page.wait_for_load_state("networkidle", timeout=30000)
+                self.page.wait_for_load_state("networkidle", timeout=8000)
             except Exception as wait_error:
                 print(f"[!] Network idle wait timed out: {str(wait_error)}")
                 print("[*] Continuing anyway as the page content may be usable...")
@@ -338,10 +338,11 @@ class PageNavigator:
             print("[*] Trying again with a longer timeout and relaxed conditions...")
             
             try:
-                # Try again with a longer timeout and relaxed wait_until condition
-                self.page.goto(url, wait_until="load", timeout=60000)
+                # Try again with shorter timeout for faster failure
+                self.page.goto(url, wait_until="load", timeout=15000)
                 return True
             except Exception as e2:
+
                 print(f"[!] Second navigation attempt failed: {str(e2)}")
                 return False
     

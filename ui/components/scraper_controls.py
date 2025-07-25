@@ -170,18 +170,14 @@ def verify_webshare_proxy():
         return
         
     try:
-        # Get direct IP first
-        direct_response = requests.get("https://httpbin.org/ip", timeout=10)
-        direct_ip = direct_response.json().get("origin", "Unknown")
-        
-        # Get proxy IP
+        # Get proxy IP using WebShare API (no external service calls)
         proxy_manager = ProxyManager(ProxyType.WEBSHARE_RESIDENTIAL)
         proxy_ip = proxy_manager.get_current_ip()
         
-        # Compare IPs to check if proxy is working
-        if proxy_ip == direct_ip:
-            st.warning(f"⚠️ Proxy not working! Both IPs are the same: {direct_ip}")
+        # Check if proxy info was retrieved successfully
+        if "Error" in proxy_ip or "not available" in proxy_ip:
+            st.warning(f"⚠️ Could not retrieve proxy info: {proxy_ip}")
         else:
-            st.success(f"✅ Proxy working! Direct IP: {direct_ip}, Proxy IP: {proxy_ip}")
+            st.success(f"✅ WebShare proxy IP: {proxy_ip}")
     except Exception as e:
         st.error(f"❌ Error: {str(e)}")

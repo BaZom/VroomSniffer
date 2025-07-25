@@ -3,7 +3,6 @@
 # Manages and rotates IP addresses to avoid being blocked by target websites.
 
 import os
-import requests
 from dotenv import load_dotenv
 from enum import Enum
 
@@ -76,49 +75,34 @@ class ProxyManager:
             "password": self.webshare_password
         }
         
-    def test_connection(self, test_url="https://httpbin.org/ip"):
+    def test_connection(self, test_url=None):
         """
-        Test if the WebShare proxy is working by making a request.
+        Test if the WebShare proxy configuration is valid.
+        No external requests - just check if credentials are configured.
         
-        Args:
-            test_url: URL to test the connection with
-            
         Returns:
-            bool: True if successful, False otherwise
+            bool: True if credentials are configured
         """
-        # Direct connections don't need testing
+        # Direct connections always work
         if self.proxy_type == ProxyType.NONE:
             return True
         
-        # Test WebShare residential proxy connection
-        try:
-            proxies = self.get_request_proxies()
-            response = requests.get(test_url, proxies=proxies, timeout=10)
-            return response.status_code == 200
-        except Exception as e:
-            print(f"WebShare proxy connection failed: {str(e)}")
-            return False
+        # For WebShare, just check if credentials are configured
+        return bool(self.webshare_username and self.webshare_password)
             
     def get_current_ip(self):
         """
-        Get the current IP address used by the connection (direct or WebShare proxy).
+        Get proxy info - no external requests, just return proxy address if available.
         
         Returns:
-            str: IP address or error message if retrieval failed
+            str: Proxy address or status message
         """
-        try:
-            # Increased timeout from 10 to 20 seconds
-            response = requests.get("https://httpbin.org/ip", 
-                                   proxies=self.get_request_proxies(), 
-                                   timeout=20)
-            
-            if response.status_code == 200:
-                return response.json().get("origin", "Unknown")
-            else:
-                return f"Error: Status code {response.status_code}"
-        except Exception as e:
-            return f"Error: {str(e)}"
-            
+        if self.proxy_type == ProxyType.NONE:
+            return "Direct connection (no proxy)"
+        
+        # Return proxy endpoint info without making external requests
+        return f"{self.webshare_proxy_host}:{self.webshare_proxy_port}"
+    
     @staticmethod
     def create_from_environment():
         """

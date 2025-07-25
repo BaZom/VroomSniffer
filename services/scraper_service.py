@@ -41,7 +41,7 @@ class ScraperService:
         self.consecutive_proxy_failures = 0
         self.max_proxy_failures = 3  # After 3 failures, switch to direct mode temporarily
         
-        # Check IP only once at initialization, not on every scraping iteration
+        # Check direct IP once at initialization only
         self.direct_ip = self._check_direct_ip_once()
         if self.use_proxy:
             print(f"[IP INFO] Startup IP: {self.direct_ip} (will use proxy for scraping)")
@@ -49,28 +49,21 @@ class ScraperService:
             print(f"[IP INFO] Startup IP: {self.direct_ip} (will use direct connection)")
     
     def _check_direct_ip_once(self):
-        """Check direct IP only once at service initialization"""
-        # Try multiple IP detection services in case httpbin.org has 503 issues
-        ip_services = [
-            ("https://api.ipify.org", lambda r: r.text.strip()),
-            ("https://icanhazip.com", lambda r: r.text.strip()),
-            ("https://httpbin.org/ip", lambda r: r.json().get("origin", "Unknown"))
-        ]
+        """Check direct IP only once at service initialization using a single reliable service"""
+        try:
+            import requests
+            # Use only one reliable service - api.ipify.org (simple and fast)
+            response = requests.get("https://api.ipify.org", timeout=5)
+            if response.status_code == 200:
+                ip = response.text.strip()
+                if ip:
+                    return ip
+        except Exception as e:
+            print(f"[IP INFO ERROR] Could not get direct IP: {str(e)}")
         
-        for service_url, parser in ip_services:
-            try:
-                import requests
-                response = requests.get(service_url, timeout=5)
-                if response.status_code == 200:
-                    ip = parser(response)
-                    if ip and ip != "Unknown":
-                        return ip
-            except Exception as e:
-                continue
-        
-        print(f"[IP INFO ERROR] All IP detection services failed")
         return "Unknown"
     
+
     def run_scraper_and_load_results(self, filters, build_search_url_ui, root_dir=None):
         """
         Run the marketplace scraper engine as a subprocess with the given filters
@@ -104,6 +97,7 @@ class ScraperService:
             # Log proxy usage intent (IP was already checked at initialization)
             if self.use_proxy and self.proxy_type == "WEBSHARE_RESIDENTIAL":
                 print(f"[IP INFO] Will use WebShare residential proxy for scraping")
+                print(f"[PROGRESS] Initializing browser with proxy configuration...")
             
             # Determine if we should use proxy for this attempt
             current_use_proxy = self.use_proxy
@@ -116,6 +110,7 @@ class ScraperService:
                 current_use_proxy = False
                 current_proxy_type = None
             
+            print(f"[PROGRESS] Launching scraper subprocess...")
             args = [sys.executable, str(self.root_dir / "scraper" / "engine.py"), "--url", url]
             
             # Add proxy arguments if needed
@@ -123,12 +118,18 @@ class ScraperService:
                 args.append("--use-proxy")
                 if current_proxy_type:
                     args.extend(["--proxy-type", current_proxy_type])
+                print(f"[PROGRESS] Using proxy type: {current_proxy_type} (IP will be assigned dynamically)")
+            else:
+                print(f"[PROGRESS] Using direct connection")
             
+            print(f"[PROGRESS] Starting page navigation and content extraction...")
             result = subprocess.run(
                 args,
                 cwd=self.root_dir, capture_output=True, text=True,
                 env=os.environ.copy()
             )
+            
+            print(f"[PROGRESS] Scraper subprocess completed with return code {result.returncode}")
             
             # Check for proxy failure when proxy was explicitly requested
             if result.returncode != 0:
@@ -137,6 +138,7 @@ class ScraperService:
                 print(f"[ERROR OUTPUT] {error_output}")
                 return []
             
+            print(f"[PROGRESS] Processing subprocess output...")
             if result.returncode == 0:
                 # Check if this was a proxy failure (empty results + proxy failure message)
                 output_text = result.stdout
@@ -223,13 +225,16 @@ class ScraperService:
                         efficiency = (requests_blocked / total_requests * 100) if total_requests > 0 else 0
                         print(f"[BANDWIDTH] Efficiency: {requests_allowed} allowed, {requests_blocked} blocked ({efficiency:.1f}% blocked)")
                     
-                # Clearly log the actual IP that was used
-                print(f"[IP INFO] ACTUAL IP used for scraping: {actual_ip}{' (via proxy)' if is_proxy else ' (direct)'}")
+                # Log connection type used for scraping
+                if is_proxy:
+                    print(f"[IP INFO] Scraping completed successfully via WebShare proxy")
+                else:
+                    print(f"[IP INFO] Scraping completed via direct connection")
                 
-                # Track this IP in storage with clear indication it's the ACTUAL scraping IP
+                # Track connection type in storage (without redundant logging)
                 try:
-                    self.storage_service.track_ip_for_url(url, actual_ip, is_proxy)
-                    print(f"[IP TRACKING] Tracked {is_proxy and 'proxy' or 'direct'} IP {actual_ip} for URL: {url}")
+                    connection_info = "WEBSHARE_PROXY" if is_proxy else actual_ip
+                    self.storage_service.track_ip_for_url(url, connection_info, is_proxy)
                 except Exception as e:
                     print(f"[IP TRACKING ERROR] Failed to track IP: {str(e)}")
                 
@@ -237,7 +242,6 @@ class ScraperService:
                 if bandwidth_kb is not None and requests_allowed is not None and requests_blocked is not None:
                     try:
                         self.storage_service.track_bandwidth_for_url(url, bandwidth_kb, requests_allowed, requests_blocked, is_proxy)
-                        print(f"[BANDWIDTH TRACKING] Saved bandwidth stats: {bandwidth_kb} KB, {requests_allowed} allowed, {requests_blocked} blocked")
                     except Exception as e:
                         print(f"[BANDWIDTH TRACKING ERROR] Failed to track bandwidth: {str(e)}")
                 

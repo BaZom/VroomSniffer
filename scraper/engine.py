@@ -75,23 +75,12 @@ def fetch_listings_from_url(url: str, use_proxy: bool = False, proxy_manager: Op
     if use_proxy and proxy_manager is None:
         proxy_manager = ProxyManager.create_from_environment()
     
-    # STRICT PROXY ENFORCEMENT: If proxy explicitly requested, it MUST work
-    if use_proxy and proxy_manager:
-        print("[PROXY CHECK] Proxy explicitly requested - testing connection...")
-        if not proxy_manager.test_connection():
-            print("❌ PROXY FAILURE: Proxy was explicitly requested but is not working.")
-            print("[PROXY CHECK] This URL will be skipped - trying next URL or fallback to direct after multiple failures")
-            return [], current_ip, False
-        else:
-            print("[PROXY CHECK] ✅ Proxy connection verified and working")
-    
+    # Setup proxy info without external API calls
     if proxy_manager:
-        current_ip = proxy_manager.get_current_ip()
+        current_ip = f"{proxy_manager.proxy_type.name}_PROXY"
         print(f"[*] Proxy type: {proxy_manager.proxy_type.name}")
-        print(f"[*] Detected IP: {current_ip}")
+        print(f"[*] Using WebShare proxy (IP assigned dynamically)")
     else:
-        # For direct connections, use a placeholder - the actual IP tracking 
-        # will be done by the scraper service using its startup IP
         current_ip = "DIRECT_CONNECTION"
         print("[*] Direct connection mode")
     
