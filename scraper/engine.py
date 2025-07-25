@@ -54,7 +54,7 @@ def parse_listing(item, base_url=""):
         return None
 
 
-def fetch_listings_from_url(url: str, use_proxy: bool = False, proxy_manager: Optional[ProxyManager] = None) -> Tuple[List[dict], str, bool]:
+def fetch_listings_from_url(url: str, use_proxy: bool = False, proxy_manager: Optional[ProxyManager] = None) -> Tuple[List[dict], str, bool, dict]:
     """
     Fetch car listings from a marketplace URL with bandwidth optimization.
     
@@ -64,7 +64,7 @@ def fetch_listings_from_url(url: str, use_proxy: bool = False, proxy_manager: Op
         proxy_manager: Optional proxy manager instance
     
     Returns:
-        Tuple of (listings, ip_address, proxy_used)
+        Tuple of (listings, ip_address, proxy_used, detection_info)
     """
     # Extract base URL for dynamic URL construction
     parsed_url = urlparse(url)
@@ -76,6 +76,8 @@ def fetch_listings_from_url(url: str, use_proxy: bool = False, proxy_manager: Op
         proxy_manager = ProxyManager.create_from_environment()
     
     # Setup proxy info without external API calls
+    detection_info = {'detection_type': 'normal', 'page_title': '', 'blocked': False}
+    
     if proxy_manager:
         current_ip = f"{proxy_manager.proxy_type.name}_PROXY"
         print(f"[*] Proxy type: {proxy_manager.proxy_type.name}")
@@ -96,13 +98,16 @@ def fetch_listings_from_url(url: str, use_proxy: bool = False, proxy_manager: Op
                 browser_options["proxy"] = proxy_config
                 print(f"[*] Using WebShare residential proxy")
         
-        # Launch browser with anti-detection
+        # Launch browser with enhanced anti-detection
         browser = p.chromium.launch(headless=True, **browser_options)
-        context = browser.new_context(
-            user_agent=AntiDetection.get_random_user_agent(),
-            viewport={"width": 1920, "height": 1080}
-        )
+        
+        # Get enhanced context options with fingerprinting protection
+        context_options = AntiDetection.get_browser_context_options()
+        context = browser.new_context(**context_options)
         page = context.new_page()
+        
+        # Add fingerprinting protection
+        AntiDetection.add_fingerprint_protection(page)
         
         # Setup bandwidth optimization and real bandwidth measurement
         page.route("**/*", resource_blocker.create_handler())
@@ -166,14 +171,16 @@ def fetch_listings_from_url(url: str, use_proxy: bool = False, proxy_manager: Op
             # Navigate to page
             navigator = PageNavigator(page)
             if not navigator.navigate_to_url(url):
-                return [], current_ip, (use_proxy and proxy_manager and proxy_manager.proxy_type == ProxyType.WEBSHARE_RESIDENTIAL)
+                detection_info['detection_type'] = 'navigation_failed'
+                return [], current_ip, (use_proxy and proxy_manager and proxy_manager.proxy_type == ProxyType.WEBSHARE_RESIDENTIAL), detection_info
             
             # Check for no results
             if navigator.check_for_no_results():
-                return [], current_ip, (use_proxy and proxy_manager and proxy_manager.proxy_type == ProxyType.WEBSHARE_RESIDENTIAL)
+                detection_info['detection_type'] = 'no_results'
+                return [], current_ip, (use_proxy and proxy_manager and proxy_manager.proxy_type == ProxyType.WEBSHARE_RESIDENTIAL), detection_info
             
-            # Debug page content if needed
-            navigator.debug_page_content()
+            # Debug page content and capture detection info
+            detection_info = navigator.debug_page_content()
             
             # Find listings directly - no change detection complexity
             listings_finder = ListingsFinder(page)
@@ -206,7 +213,7 @@ def fetch_listings_from_url(url: str, use_proxy: bool = False, proxy_manager: Op
         # Update the resource blocker's bandwidth tracker for downstream reporting
         resource_blocker.bandwidth_tracker.total_bytes = bandwidth_data['total_bytes']
     
-    return parsed_listings, current_ip, (use_proxy and proxy_manager and proxy_manager.proxy_type == ProxyType.WEBSHARE_RESIDENTIAL)
+    return parsed_listings, current_ip, (use_proxy and proxy_manager and proxy_manager.proxy_type == ProxyType.WEBSHARE_RESIDENTIAL), detection_info
 
 
 if __name__ == "__main__":
@@ -239,7 +246,7 @@ if __name__ == "__main__":
         print("[!] Will continue with scraping, but proxy may not be available.")
     
     # Run scraper
-    listings, used_ip, is_proxy_used = fetch_listings_from_url(args.url, args.use_proxy, proxy_manager)
+    listings, used_ip, is_proxy_used, detection_info = fetch_listings_from_url(args.url, args.use_proxy, proxy_manager)
     
     # Save results
     with open("storage/latest_results.json", "w", encoding="utf-8") as f:
@@ -250,6 +257,25 @@ if __name__ == "__main__":
     print(f"[*] Scraping completed using IP: {used_ip}")
     print(f"[*] Used proxy: {'Yes' if is_proxy_used else 'No'}")
     print(f"[*] ACTUAL_IP_USED: {used_ip} via {'proxy' if is_proxy_used else 'direct connection'}")
+    
+    # Track detection events
+    if detection_info:
+        from services.storage_service import StorageService
+        storage_service = StorageService()
+        success = len(listings) > 0 or detection_info['detection_type'] == 'no_results'
+        storage_service.track_detection_event(
+            url=args.url,
+            ip=used_ip,
+            is_proxy=is_proxy_used,
+            detection_type=detection_info.get('detection_type', 'normal'),
+            page_title=detection_info.get('page_title', ''),
+            success=success,
+            listings_found=len(listings),
+            trigger_indicator=detection_info.get('trigger_indicator')
+        )
+        print(f"[*] Detection event tracked: {detection_info.get('detection_type', 'normal')}")
+        if detection_info.get('trigger_indicator'):
+            print(f"[*] Trigger indicator: {detection_info.get('trigger_indicator')}")
     
     # Send notifications if requested
     if args.notify and listings:

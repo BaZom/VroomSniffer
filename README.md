@@ -35,7 +35,9 @@ A modern, service-oriented web scraping system designed to collect car listings 
 - **⚡ CLI Interface**: Command-line tools for automation and scripting
 - **🔧 Service-Oriented Architecture**: Clean separation of concerns with specialized services
 - **🌍 Proxy Support**: WebShare rotating residential proxy integration to avoid blocking
-- **📊 IP Tracking**: Track and monitor which IPs are used to access each URL
+- **�️ Advanced Anti-Detection**: Enhanced fingerprinting protection and behavioral patterns
+- **🚨 Real-Time Detection Monitoring**: Comprehensive tracking of scraping health and blocking attempts
+- **�📊 IP Tracking**: Track and monitor which IPs are used to access each URL
 - **📊 JSON-based Storage**: Efficient data persistence with extensible service layer
 
 ## 🚀 Quick Start
@@ -289,9 +291,28 @@ VroomSniffer includes comprehensive documentation to help you understand and ext
 
 - [CLI Documentation](./docs/cli_documentation.md) - Complete command reference with all options
 - [Architecture Documentation](./docs/architecture.md) - Detailed system design and component interactions
+- [Detection Monitoring Guide](./docs/detection_monitoring_guide.md) - **NEW!** Comprehensive anti-detection and monitoring system
+- [Implementation Log](./docs/implementation_log_2025_07_25.md) - Recent improvements and changes
 - [Feature Implementation Guide](./docs/feature_implementation_guide.md) - Guide for adding new features
 - [IP Tracking Guide](./docs/ip_tracking_guide.md) - Information about IP tracking capabilities
 - [Proxy Guide](./docs/proxy_guide.md) - Guide for using proxies with VroomSniffer
+- [Bandwidth Accuracy](./docs/bandwidth_accuracy.md) - Bandwidth optimization and measurement
+
+### 🚨 Detection Monitoring Quick Start
+
+Monitor your scraping health with built-in tools:
+
+```bash
+# Check detection events and risk level
+python tests/monitor_detection.py
+
+# View clean file structure
+python tests/show_file_structure.py
+```
+
+**Detection Files:**
+- `storage/ip_tracking.json` - Clean IP/URL performance data
+- `storage/detection_events.json` - Security events and warnings
 
 ## Troubleshooting
 

@@ -6,6 +6,10 @@ import random
 import time
 from typing import Dict, List, Tuple, Any
 from playwright.sync_api import Page, BrowserContext, Route, Request
+from colorama import Fore, Style, init
+
+# Initialize colorama for colored output
+init(autoreset=True)
 
 # ULTRA-AGGRESSIVE blocking for maximum bandwidth savings (target: minimal KB)
 BLOCKED_RESOURCE_TYPES = [
@@ -286,12 +290,35 @@ class AntiDetection:
     
     @staticmethod
     def get_random_user_agent() -> str:
-        """Get a random user agent to avoid detection"""
+        """Get a random user agent to avoid detection - Enhanced pool"""
         user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/114.0"
+            # Chrome Windows (most common)
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            
+            # Chrome macOS
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Apple M1 Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            
+            # Firefox Windows
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
+            "Mozilla/5.0 (Windows NT 11.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+            
+            # Firefox macOS
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:121.0) Gecko/20100101 Firefox/121.0",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:120.0) Gecko/20100101 Firefox/120.0",
+            
+            # Safari macOS
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15",
+            
+            # Edge Windows
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",
+            "Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
         ]
         return random.choice(user_agents)
     
@@ -303,11 +330,99 @@ class AntiDetection:
         time.sleep(delay)
     
     @staticmethod
-    def setup_context(context: BrowserContext):
-        """Configure browser context for anti-detection"""
-        # Set realistic viewport
-        context.set_viewport_size({"width": 1920, "height": 1080})
-
+    def setup_context(context):
+        """Configure browser context for anti-detection (legacy method - use get_browser_context_options instead)"""
+        # This method is kept for compatibility but enhanced context setup
+        # is now handled in get_browser_context_options()
+        viewport = AntiDetection.get_random_viewport()
+        context.set_viewport_size(viewport)
+    
+    @staticmethod
+    def get_random_viewport() -> dict:
+        """Get a random realistic viewport size"""
+        viewports = [
+            {"width": 1920, "height": 1080},  # Full HD (most common)
+            {"width": 1366, "height": 768},   # Common laptop
+            {"width": 1536, "height": 864},   # Scaled display
+            {"width": 1440, "height": 900},   # MacBook Air
+            {"width": 1600, "height": 900},   # 16:9 widescreen
+            {"width": 1280, "height": 720},   # HD
+        ]
+        return random.choice(viewports)
+    
+    @staticmethod
+    def get_browser_context_options() -> dict:
+        """Get randomized browser context options for fingerprinting protection"""
+        viewport = AntiDetection.get_random_viewport()
+        
+        return {
+            "user_agent": AntiDetection.get_random_user_agent(),
+            "viewport": viewport,
+            "screen": {
+                "width": viewport["width"],
+                "height": viewport["height"]
+            },
+            "device_scale_factor": random.choice([1, 1.25, 1.5, 2]),
+            "is_mobile": False,
+            "has_touch": False,
+            "locale": random.choice(["en-US", "en-GB", "de-DE", "en-CA"]),
+            "timezone_id": random.choice([
+                "Europe/Berlin", "America/New_York", "Europe/London", 
+                "America/Los_Angeles", "Europe/Paris"
+            ]),
+            "permissions": ["geolocation"],
+            "color_scheme": random.choice(["light", "dark"]),
+            "reduced_motion": random.choice(["reduce", "no-preference"])
+        }
+    
+    @staticmethod
+    def add_fingerprint_protection(page):
+        """Add JavaScript to protect against browser fingerprinting"""
+        # WebRTC leak protection
+        page.add_init_script("""
+            // Disable WebRTC to prevent IP leaks
+            Object.defineProperty(navigator, 'mediaDevices', {
+                get: () => undefined
+            });
+            
+            // Spoof canvas fingerprinting
+            const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+            HTMLCanvasElement.prototype.toDataURL = function(type) {
+                if (type === 'image/png' || type === 'image/jpeg') {
+                    // Add random noise to canvas fingerprinting
+                    const context = this.getContext('2d');
+                    if (context) {
+                        const imageData = context.getImageData(0, 0, this.width, this.height);
+                        for (let i = 0; i < imageData.data.length; i += 4) {
+                            imageData.data[i] += Math.floor(Math.random() * 2); // Add noise
+                        }
+                        context.putImageData(imageData, 0, 0);
+                    }
+                }
+                return originalToDataURL.apply(this, arguments);
+            };
+            
+            // Spoof WebGL fingerprinting
+            const originalGetParameter = WebGLRenderingContext.prototype.getParameter;
+            WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                if (parameter === 37445) { // UNMASKED_VENDOR_WEBGL
+                    return 'Intel Inc.';
+                }
+                if (parameter === 37446) { // UNMASKED_RENDERER_WEBGL
+                    return 'Intel Iris Pro OpenGL Engine';
+                }
+                return originalGetParameter.apply(this, arguments);
+            };
+            
+            // Spoof navigator properties
+            Object.defineProperty(navigator, 'hardwareConcurrency', {
+                get: () => 4
+            });
+            
+            Object.defineProperty(navigator, 'deviceMemory', {
+                get: () => 8
+            });
+        """)
 
 class PageNavigator:
     """Handles page navigation with error handling and fallbacks"""
@@ -367,25 +482,295 @@ class PageNavigator:
         return False
     
     def debug_page_content(self):
-        """Print debug information about the page content"""
+        """Print debug information about the page content and return detection info"""
+        detection_info = {
+            'detection_type': 'normal',
+            'page_title': '',
+            'blocked': False,
+            'trigger_indicator': None
+        }
+        
         try:
             title = self.page.title()
+            url = self.page.url
+            detection_info['page_title'] = title
             
-            # Check if we've been blocked or got a CAPTCHA
-            if "captcha" in title.lower() or "blocked" in title.lower():
-                print("[WARNING] Possible CAPTCHA or blocking detected")
-                return
+            # Enhanced detection patterns
+            blocking_indicators = [
+                "captcha", "blocked", "bot", "robot", "verification", 
+                "suspicious", "unusual traffic", "access denied",
+                "cloudflare", "security check", "human verification"
+            ]
             
-            # Check if page contains expected content
+            title_lower = title.lower()
+            
+            # Find specific blocking indicator in title
+            found_indicator = None
+            for indicator in blocking_indicators:
+                if indicator in title_lower:
+                    found_indicator = indicator
+                    break
+            
+            if found_indicator:
+                detection_info['detection_type'] = 'blocked'
+                detection_info['blocked'] = True
+                detection_info['trigger_indicator'] = f"title_contains:{found_indicator}"
+                print(f"{Fore.RED}[DETECTION WARNING] Possible blocking detected:{Style.RESET_ALL}")
+                print(f"  Page title: {title}")
+                print(f"  Trigger: {found_indicator}")
+                print(f"  URL: {url}")
+                print(f"  🚨 Consider upgrading anti-detection measures!")
+                return detection_info
+            
+            # Check page content for blocking indicators
             content = self.page.content()
-            if "Autos" in content and "von" in content:
-                # Basic content validation passed
-                pass
+            content_lower = content.lower()
+            
+            # Look for common blocking messages in content
+            content_blocking_indicators = [
+                "access to this page has been denied",
+                "your request has been blocked",
+                "unusual traffic from your computer",
+                "prove you're not a robot",
+                "security check",
+                "cloudflare ray id"
+            ]
+            
+            # Find specific content blocking indicator
+            found_content_indicator = None
+            for indicator in content_blocking_indicators:
+                if indicator in content_lower:
+                    found_content_indicator = indicator
+                    break
+            
+            if found_content_indicator:
+                detection_info['detection_type'] = 'content_blocked'
+                detection_info['blocked'] = True
+                detection_info['trigger_indicator'] = f"content_contains:{found_content_indicator}"
+                print(f"{Fore.RED}[CONTENT BLOCKING] Blocking detected in page content{Style.RESET_ALL}")
+                print(f"  Trigger: {found_content_indicator}")
+                return detection_info
+                
+            # DYNAMIC CONTENT VALIDATION based on URL
+            expected_content = self._extract_expected_content_from_url(url)
+            missing_content = self._validate_expected_content(content, content_lower, title, expected_content)
+            
+            if not missing_content:
+                # All expected content found
+                detection_info['detection_type'] = 'normal'
             else:
-                print("[WARNING] Page does not contain expected car listings content")
+                # Check if it's a genuine "no results" vs. blocking
+                no_results_indicators = [
+                    "keine ergebnisse", "no results", "0 ergebnisse",
+                    "nothing found", "kein treffer"
+                ]
+                
+                genuine_no_results = any(indicator in content_lower for indicator in no_results_indicators)
+                
+                if genuine_no_results:
+                    # Find which no-results indicator was found
+                    found_no_results = None
+                    for indicator in no_results_indicators:
+                        if indicator in content_lower:
+                            found_no_results = indicator
+                            break
+                    detection_info['detection_type'] = 'no_results'
+                    detection_info['trigger_indicator'] = f"no_results_contains:{found_no_results}"
+                else:
+                    detection_info['detection_type'] = 'warning'
+                    detection_info['trigger_indicator'] = f"warning:{','.join(missing_content)}"
+                    print(f"{Fore.YELLOW}[CONTENT WARNING] Page lacks expected content based on URL{Style.RESET_ALL}")
+                    print(f"  This might indicate soft blocking or altered page structure")
+                    print(f"  Page title: {title}")
+                    print(f"  Expected but missing: {', '.join(missing_content)}")
+                    print(f"  URL indicators: {expected_content}")
                 
         except Exception as e:
             print(f"[WARNING] Could not analyze page content: {str(e)}")
+            detection_info['detection_type'] = 'error'
+            detection_info['trigger_indicator'] = f"error:{str(e)[:50]}"
+        
+        return detection_info
+
+    def _extract_expected_content_from_url(self, url):
+        """Extract expected content words from URL parameters and path"""
+        expected = {
+            'categories': [],
+            'brands': [],
+            'models': [],
+            'filters': [],
+            'seller_types': []
+        }
+        
+        # Always expect "Autos" for car category URLs
+        if "/s-autos/" in url:
+            expected['categories'].append("Autos")
+        
+        # Extract seller type (anbieter)
+        if "anbieter:privat" in url:
+            expected['seller_types'].extend(["privat", "von privat"])
+        elif "anbieter:haendler" in url:
+            expected['seller_types'].extend(["Händler", "von Händler"])
+        
+        # Extract car brands from URL path
+        url_parts = url.split('/')
+        for part in url_parts:
+            if part in ['bmw', 'mercedes', 'audi', 'volkswagen', 'vw', 'seat', 'kia', 'hyundai']:
+                expected['brands'].append(part.upper() if part == 'bmw' else part.title())
+        
+        # Extract models from URL (after brand or in search terms)
+        model_indicators = ['golf', 'x1', 'a3', 'a5', 'q3', '320', 'cla', 'arona', 'tucson', 'sportage', 'mercedes-a']
+        for model in model_indicators:
+            if model in url.lower():
+                model_clean = model.replace('-', ' ').title()
+                expected['models'].append(model_clean)
+        
+        # Extract price filters
+        if "preis:" in url:
+            expected['filters'].extend(["Preis", "€", "von", "bis"])
+        
+        # Extract transmission filter
+        if "automatik" in url:
+            expected['filters'].append("Automatik")
+        
+        # Extract fuel type filters
+        if "benzin" in url:
+            expected['filters'].append("Benzin")
+        if "diesel" in url:
+            expected['filters'].append("Diesel")
+        if "hybrid" in url:
+            expected['filters'].append("Hybrid")
+            
+        return expected
+    
+    def _validate_expected_content(self, content, content_lower, title, expected_content):
+        """Validate that expected content from URL is present on the page"""
+        missing_content = []
+        
+        # Check categories (most important)
+        for category in expected_content['categories']:
+            if category.lower() not in content_lower:
+                missing_content.append(f"missing_{category}")
+        
+        # Check seller types (important for filter UI)
+        seller_found = False
+        for seller_type in expected_content['seller_types']:
+            if seller_type.lower() in content_lower:
+                seller_found = True
+                break
+        if expected_content['seller_types'] and not seller_found:
+            missing_content.append("missing_seller_filter")
+        
+        # Check that basic filter words are present (indicates filter UI loaded)
+        filter_words_found = 0
+        for filter_word in expected_content['filters']:
+            if filter_word.lower() in content_lower:
+                filter_words_found += 1
+        
+        # If we expect filters but find none, that's suspicious
+        if expected_content['filters'] and filter_words_found == 0:
+            missing_content.append("missing_all_filters")
+        elif expected_content['filters'] and filter_words_found < len(expected_content['filters']) * 0.3:
+            missing_content.append("missing_most_filters")
+        
+        # Check brands (less critical - might not appear if no results)
+        brand_found = False
+        for brand in expected_content['brands']:
+            if brand.lower() in content_lower or brand.lower() in title.lower():
+                brand_found = True
+                break
+        # Only flag missing brand if we have other content (not a complete failure)
+        if expected_content['brands'] and not brand_found and len(missing_content) == 0:
+            missing_content.append("missing_brand_context")
+        
+        # Check basic page structure
+        if title == "":
+            missing_content.append("empty_title")
+            
+        return missing_content
+
+    @staticmethod
+    def analyze_url_for_expected_content(url):
+        """
+        Static method to analyze a URL and return what content should be expected.
+        Useful for previewing detection logic for new URLs.
+        """
+        print(f"\n🔍 ANALYZING URL FOR EXPECTED CONTENT:")
+        print(f"URL: {url}")
+        
+        # Use the static extraction logic directly
+        expected = {
+            'categories': [],
+            'brands': [],
+            'models': [],
+            'filters': [],
+            'seller_types': []
+        }
+        
+        # Always expect "Autos" for car category URLs
+        if "/s-autos/" in url:
+            expected['categories'].append("Autos")
+        
+        # Extract seller type (anbieter)
+        if "anbieter:privat" in url:
+            expected['seller_types'].extend(["privat", "von privat"])
+        elif "anbieter:haendler" in url:
+            expected['seller_types'].extend(["Händler", "von Händler"])
+        
+        # Extract car brands from URL path
+        url_parts = url.split('/')
+        for part in url_parts:
+            if part in ['bmw', 'mercedes', 'audi', 'volkswagen', 'vw', 'seat', 'kia', 'hyundai']:
+                expected['brands'].append(part.upper() if part == 'bmw' else part.title())
+        
+        # Extract models from URL (after brand or in search terms)
+        model_indicators = ['golf', 'x1', 'a3', 'a5', 'q3', '320', 'cla', 'arona', 'tucson', 'sportage', 'mercedes-a']
+        for model in model_indicators:
+            if model in url.lower():
+                model_clean = model.replace('-', ' ').title()
+                expected['models'].append(model_clean)
+        
+        # Extract price filters
+        if "preis:" in url:
+            expected['filters'].extend(["Preis", "€", "von", "bis"])
+        
+        # Extract transmission filter
+        if "automatik" in url:
+            expected['filters'].append("Automatik")
+        
+        # Extract fuel type filters
+        if "benzin" in url:
+            expected['filters'].append("Benzin")
+        if "diesel" in url:
+            expected['filters'].append("Diesel")
+        if "hybrid" in url:
+            expected['filters'].append("Hybrid")
+        
+        print(f"\n📋 EXPECTED CONTENT BREAKDOWN:")
+        print(f"  🏷️  Categories: {expected['categories']}")
+        print(f"  🚗 Brands: {expected['brands']}")  
+        print(f"  📝 Models: {expected['models']}")
+        print(f"  🔧 Filters: {expected['filters']}")
+        print(f"  👤 Seller Types: {expected['seller_types']}")
+        
+        print(f"\n✅ PAGE SHOULD CONTAIN:")
+        all_expected_words = []
+        all_expected_words.extend(expected['categories'])
+        all_expected_words.extend(expected['brands'])
+        all_expected_words.extend(expected['models'])
+        all_expected_words.extend(expected['filters'])
+        all_expected_words.extend(expected['seller_types'])
+        
+        for word in set(all_expected_words):
+            print(f"  • '{word}'")
+            
+        print(f"\n🚨 WILL TRIGGER WARNING IF MISSING:")
+        print(f"  • Any category words (most critical)")
+        print(f"  • Seller filter UI ('von privat', 'Händler')")
+        print(f"  • Filter words if >70% missing")
+        print(f"  • Empty page title")
+        
+        return expected
 
 
 class ListingsFinder:

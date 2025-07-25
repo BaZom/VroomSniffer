@@ -5,6 +5,7 @@ Responsible for loading, saving, and managing listings in storage files.
 import json
 import re
 from pathlib import Path
+from datetime import datetime
 
 class StorageService:
     """Service for handling all storage operations"""
@@ -14,6 +15,7 @@ class StorageService:
         self.all_old_path = all_old_path or str(Path(__file__).parent.parent / "storage" / "all_old_results.json")
         self.latest_new_path = latest_new_path or str(Path(__file__).parent.parent / "storage" / "latest_new_results.json")
         self.ip_tracking_path = str(Path(__file__).parent.parent / "storage" / "ip_tracking.json")
+        self.detection_events_path = str(Path(__file__).parent.parent / "storage" / "detection_events.json")
         self.bandwidth_tracking_path = str(Path(__file__).parent.parent / "storage" / "bandwidth_tracking.json")
     
     def load_cache(self, cache_path=None):
@@ -359,8 +361,7 @@ class StorageService:
             tracking_data["url_ip_mapping"][url] = []
         
         # Add new IP entry with timestamp and proxy info
-        import datetime
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         # Check if the same IP has been used before for this URL to avoid duplicates
         for entry in tracking_data["url_ip_mapping"][url]:
@@ -464,8 +465,7 @@ class StorageService:
             tracking_data["url_bandwidth_mapping"][url] = []
         
         # Add new bandwidth entry with timestamp
-        import datetime
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         efficiency = (requests_blocked / (requests_allowed + requests_blocked) * 100) if (requests_allowed + requests_blocked) > 0 else 0
         
@@ -526,3 +526,126 @@ class StorageService:
             pass
         
         return None
+    
+    def track_detection_event(self, url, ip, is_proxy=False, detection_type=None, page_title=None, 
+                            success=True, listings_found=0, response_time=None, trigger_indicator=None, ip_tracking_path=None):
+        """
+        Enhanced IP tracking with detection events stored in separate files
+        
+        Args:
+            url: The URL being accessed
+            ip: The IP address used
+            is_proxy: Whether this IP is a proxy IP
+            detection_type: Type of detection ('captcha', 'blocked', 'normal', 'warning')
+            page_title: Page title for detection analysis
+            success: Whether scraping was successful
+            listings_found: Number of listings found (0 could indicate blocking)
+            response_time: Page load time in seconds
+            trigger_indicator: Specific indicator that triggered the detection (e.g., 'title_contains:captcha')
+            ip_tracking_path: Path to IP tracking file (optional)
+        """
+        # Handle IP tracking in ip_tracking.json (clean, no detection events)
+        self._track_ip_mapping(url, ip, is_proxy, success, listings_found, ip_tracking_path)
+        
+        # Handle detection events in separate detection_events.json
+        if detection_type and detection_type != 'normal':
+            self._track_detection_event_separate(url, ip, is_proxy, detection_type, page_title, 
+                                               success, listings_found, response_time, trigger_indicator)
+    
+    def _track_ip_mapping(self, url, ip, is_proxy, success, listings_found, ip_tracking_path=None):
+        """Track IP usage for URLs without detection events (clean file)"""
+        path = ip_tracking_path or self.ip_tracking_path
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        
+        # Load existing data
+        try:
+            if Path(path).exists():
+                with open(path, "r", encoding="utf-8") as f:
+                    tracking_data = json.load(f)
+            else:
+                tracking_data = {"url_ip_mapping": {}, "last_updated": ""}
+        except json.JSONDecodeError:
+            tracking_data = {"url_ip_mapping": {}, "last_updated": ""}
+        
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Update URL-IP mapping
+        if url not in tracking_data["url_ip_mapping"]:
+            tracking_data["url_ip_mapping"][url] = []
+        
+        # Find or create IP entry
+        ip_entry = None
+        for entry in tracking_data["url_ip_mapping"][url]:
+            if entry["ip"] == ip:
+                ip_entry = entry
+                break
+        
+        if ip_entry is None:
+            ip_entry = {
+                "ip": ip,
+                "first_used": current_time,
+                "last_used": current_time,
+                "is_proxy": is_proxy,
+                "use_count": 1,
+                "success_count": 1 if success else 0,
+                "total_listings": listings_found
+            }
+            tracking_data["url_ip_mapping"][url].append(ip_entry)
+        else:
+            ip_entry["last_used"] = current_time
+            ip_entry["use_count"] += 1
+            if success:
+                ip_entry["success_count"] = ip_entry.get("success_count", 0) + 1
+            ip_entry["total_listings"] = ip_entry.get("total_listings", 0) + listings_found
+        
+        # Update metadata
+        tracking_data["last_updated"] = current_time
+        
+        # Save updated data
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(tracking_data, f, ensure_ascii=False, indent=2)
+    
+    def _track_detection_event_separate(self, url, ip, is_proxy, detection_type, page_title, 
+                                      success, listings_found, response_time, trigger_indicator=None):
+        """Track detection events in separate file"""
+        Path(self.detection_events_path).parent.mkdir(parents=True, exist_ok=True)
+        
+        # Load existing detection events
+        try:
+            if Path(self.detection_events_path).exists():
+                with open(self.detection_events_path, "r", encoding="utf-8") as f:
+                    events_data = json.load(f)
+            else:
+                events_data = {"detection_events": [], "last_updated": ""}
+        except json.JSONDecodeError:
+            events_data = {"detection_events": [], "last_updated": ""}
+        
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Create detection event
+        detection_event = {
+            "timestamp": current_time,
+            "detection_type": detection_type,
+            "page_title": page_title,
+            "success": success,
+            "listings_found": listings_found,
+            "response_time": response_time,
+            "url": url,
+            "ip": ip,
+            "is_proxy": is_proxy,
+            "trigger_indicator": trigger_indicator
+        }
+        
+        # Add to events list
+        events_data["detection_events"].append(detection_event)
+        
+        # Keep only last 1000 events to prevent file bloat
+        if len(events_data["detection_events"]) > 1000:
+            events_data["detection_events"] = events_data["detection_events"][-1000:]
+        
+        # Update metadata
+        events_data["last_updated"] = current_time
+        
+        # Save detection events
+        with open(self.detection_events_path, "w", encoding="utf-8") as f:
+            json.dump(events_data, f, ensure_ascii=False, indent=2)

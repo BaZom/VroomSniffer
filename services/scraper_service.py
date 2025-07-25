@@ -231,12 +231,8 @@ class ScraperService:
                 else:
                     print(f"[IP INFO] Scraping completed via direct connection")
                 
-                # Track connection type in storage (without redundant logging)
-                try:
-                    connection_info = "WEBSHARE_PROXY" if is_proxy else actual_ip
-                    self.storage_service.track_ip_for_url(url, connection_info, is_proxy)
-                except Exception as e:
-                    print(f"[IP TRACKING ERROR] Failed to track IP: {str(e)}")
+                # Note: IP tracking is now handled by the detection tracking system in scraper engine
+                # No need for separate track_ip_for_url call here
                 
                 # Track bandwidth information if available
                 if bandwidth_kb is not None and requests_allowed is not None and requests_blocked is not None:
