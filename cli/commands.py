@@ -639,9 +639,19 @@ def run_scheduler(
                     notify_count
                 )
                 
+                # If no listings found, try once more before giving up
+                if not success:
+                    print(f"{Fore.YELLOW}[!] No listings found. Retrying once...{Style.RESET_ALL}")
+                    success = run_scraper_with_url_improved(
+                        services, 
+                        run_urls, 
+                        notify_new, 
+                        notify_count
+                    )
+                
                 # If proxy was required but failed, try next URL before giving up
                 if not success:
-                    print(f"{Fore.YELLOW}[!] Scraping failed - will try next URL{Style.RESET_ALL}")
+                    print(f"{Fore.YELLOW}[!] Scraping failed after retry - will try next URL{Style.RESET_ALL}")
                     # Don't increment runs_completed for failed attempts
                     # Don't stop - just continue to next URL
                 else:
