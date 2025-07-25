@@ -9,6 +9,14 @@ The CLI is organized into several modules:
 - argparse_setup.py: Command-line argument parsing setup
 - utils.py: Utility functions and service initialization
 
+Core scraper utilities are located in scraper/utils/ package:
+- anti_detection.py: Browser stealth and fingerprinting protection
+- bandwidth_tracker.py: Request monitoring and bandwidth optimization  
+- resource_blocker.py: Request filtering and resource blocking
+- page_navigator.py: Page navigation with detection analysis
+- listings_finder.py: Robust listing discovery with fallbacks
+- constants.py: Configuration constants and blocking rules
+
 Usage:
     python -m cli.main <command> [options]
 """

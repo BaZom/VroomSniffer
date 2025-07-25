@@ -143,6 +143,40 @@ The Service Layer contains specialized service classes for different domain conc
    - Responsibilities: Create/manage scheduled tasks
    - Location: `services/scheduler_service.py`
 
+### Scraper Utils Package
+
+The scraper utilities are organized into a modular package (`scraper/utils/`) with focused components:
+
+1. **AntiDetection** (`anti_detection.py`)
+   - Purpose: Browser stealth and fingerprinting protection
+   - Responsibilities: User agent rotation, browser context randomization, fingerprint spoofing
+   - Features: WebRTC blocking, canvas fingerprinting protection, hardware spoofing
+
+2. **ResourceBlocker** (`resource_blocker.py`)
+   - Purpose: Request filtering and bandwidth optimization
+   - Responsibilities: Block ads/tracking, reduce bandwidth usage, performance monitoring
+   - Features: Ultra-aggressive blocking, whitelist approach, statistics reporting
+
+3. **BandwidthTracker** (`bandwidth_tracker.py`)
+   - Purpose: Monitor and report bandwidth usage
+   - Responsibilities: Track request sizes, measure efficiency, detailed reporting
+   - Features: Real-time measurement, redirect handling, optimization insights
+
+4. **PageNavigator** (`page_navigator.py`)
+   - Purpose: Robust page navigation with detection analysis
+   - Responsibilities: URL navigation, content validation, detection classification
+   - Features: Dynamic content analysis, blocking detection, trigger indicators
+
+5. **ListingsFinder** (`listings_finder.py`)
+   - Purpose: Discover listings with multiple fallback strategies
+   - Responsibilities: Element selection, fallback selectors, robust finding
+   - Features: Multiple selector strategies, timeout handling, result validation
+
+6. **Constants** (`constants.py`)
+   - Purpose: Configuration constants and blocking rules
+   - Responsibilities: Resource type definitions, URL blocking patterns, essential resources
+   - Features: Centralized configuration, easily maintainable rules
+
 ## Future Evolution
 
 The current architecture is designed to evolve gracefully:

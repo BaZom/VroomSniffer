@@ -230,6 +230,13 @@ car_scraper/
 ├── providers/               # Service provider pattern implementation
 ├── services/                # Service layer (business logic)
 ├── scraper/                 # Scraping engine (Playwright)
+│   └── utils/               # 🆕 Modular utilities package
+│       ├── anti_detection.py    # Browser stealth & fingerprinting
+│       ├── bandwidth_tracker.py # Bandwidth monitoring
+│       ├── resource_blocker.py  # Request filtering
+│       ├── page_navigator.py    # Navigation & detection
+│       ├── listings_finder.py   # Listing discovery
+│       └── constants.py         # Configuration constants
 ├── storage/                 # Data persistence (JSON files)
 ├── notifier/                # Notification system (Telegram)
 ├── proxy/                   # Proxy management
@@ -291,8 +298,8 @@ VroomSniffer includes comprehensive documentation to help you understand and ext
 
 - [CLI Documentation](./docs/cli_documentation.md) - Complete command reference with all options
 - [Architecture Documentation](./docs/architecture.md) - Detailed system design and component interactions
+- [Utils Package Guide](./docs/utils_package_guide.md) - **NEW!** Modular scraper utilities documentation
 - [Detection Monitoring Guide](./docs/detection_monitoring_guide.md) - **NEW!** Comprehensive anti-detection and monitoring system
-- [Implementation Log](./docs/implementation_log_2025_07_25.md) - Recent improvements and changes
 - [Feature Implementation Guide](./docs/feature_implementation_guide.md) - Guide for adding new features
 - [IP Tracking Guide](./docs/ip_tracking_guide.md) - Information about IP tracking capabilities
 - [Proxy Guide](./docs/proxy_guide.md) - Guide for using proxies with VroomSniffer

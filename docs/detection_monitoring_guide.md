@@ -18,11 +18,12 @@ This document describes the comprehensive detection tracking and anti-detection 
 
 The detection tracking system consists of three main components:
 
-### 1. **Detection Analysis Engine** (`scraper/utils.py`)
-- Real-time page content analysis
-- Title and content-based blocking detection
-- Multi-level warning system
-- Fingerprinting protection validation
+### 1. **Detection Analysis Engine** (`scraper/utils/` package)
+- **PageNavigator** (`page_navigator.py`) - Real-time page content analysis and detection
+- **AntiDetection** (`anti_detection.py`) - Fingerprinting protection and browser stealth
+- **ResourceBlocker** (`resource_blocker.py`) - Bandwidth optimization and request filtering
+- Multi-level warning system with trigger indicators
+- Dynamic content validation based on URL patterns
 
 ### 2. **Event Tracking Service** (`services/storage_service.py`)
 - Separate file storage for clean organization
