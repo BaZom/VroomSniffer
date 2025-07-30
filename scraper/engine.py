@@ -8,11 +8,12 @@ import argparse
 import json
 import sys
 import time
+import platform
 from pathlib import Path
 from typing import List, Tuple, Optional
 from urllib.parse import urlparse
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, Browser, BrowserContext
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
@@ -20,6 +21,99 @@ sys.path.append(str(Path(__file__).parent.parent))
 from notifier.telegram import send_telegram_message, format_car_listing_message
 from proxy.manager import ProxyManager, ProxyType
 from scraper.utils import ResourceBlocker, AntiDetection, PageNavigator, ListingsFinder
+
+
+# Global browser instance for reuse across scrapes  
+_browser_instance: Optional[Browser] = None
+_playwright_instance = None
+
+
+def get_platform_launch_args():
+    """Get platform-specific browser launch arguments for performance optimization"""
+    system = platform.system().lower()
+    
+    base_args = [
+        '--no-sandbox',
+        '--disable-blink-features=AutomationControlled',
+        '--disable-features=VizDisplayCompositor',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-background-timer-throttling',
+        '--disable-ipc-flooding-protection',
+    ]
+    
+    if system == 'windows':
+        # Windows-specific performance optimizations
+        windows_args = [
+            '--disable-gpu-sandbox',
+            '--disable-software-rasterizer', 
+            '--disable-dev-shm-usage',
+            '--disable-extensions',
+            '--disable-plugins',
+            '--disable-default-apps',
+            '--disable-sync',
+            '--disable-translate',
+            '--disable-background-networking',
+            '--disable-background-mode',
+            '--disable-client-side-phishing-detection',
+            '--disable-component-update',
+            '--disable-domain-reliability',
+            '--disable-features=TranslateUI',
+            '--disable-hang-monitor',
+            '--disable-prompt-on-repost',
+            '--disable-web-security',
+            '--memory-pressure-off',
+            '--max_old_space_size=4096',
+        ]
+        return base_args + windows_args
+    elif system == 'darwin':  # macOS
+        # macOS-specific optimizations
+        macos_args = [
+            '--disable-dev-shm-usage',
+            '--disable-extensions',
+            '--disable-default-apps',
+        ]
+        return base_args + macos_args
+    else:  # Linux
+        # Linux-specific optimizations  
+        linux_args = [
+            '--disable-dev-shm-usage',
+            '--disable-extensions',
+            '--disable-gpu',
+            '--disable-setuid-sandbox',
+        ]
+        return base_args + linux_args
+
+
+def get_reusable_browser():
+    """Get a reusable browser instance with platform optimizations"""
+    global _browser_instance, _playwright_instance
+    
+    if _browser_instance is None or not _browser_instance.is_connected():
+        if _playwright_instance is None:
+            _playwright_instance = sync_playwright().start()
+        
+        launch_args = get_platform_launch_args()
+        
+        _browser_instance = _playwright_instance.chromium.launch(
+            headless=True,
+            args=launch_args
+        )
+    
+    return _browser_instance
+
+
+def cleanup_browser():
+    """Clean up browser resources"""
+    global _browser_instance, _playwright_instance
+    
+    if _browser_instance and _browser_instance.is_connected():
+        _browser_instance.close()
+        _browser_instance = None
+    
+    if _playwright_instance:
+        _playwright_instance.stop()
+        _playwright_instance = None
 
 
 def parse_listing(item, base_url=""):
@@ -54,7 +148,7 @@ def parse_listing(item, base_url=""):
         return None
 
 
-def fetch_listings_from_url(url: str, use_proxy: bool = False, proxy_manager: Optional[ProxyManager] = None) -> Tuple[List[dict], str, bool, dict]:
+def fetch_listings_from_url(url: str, use_proxy: bool = False, proxy_manager: Optional[ProxyManager] = None, fast_mode: bool = True) -> Tuple[List[dict], str, bool, dict]:
     """
     Fetch car listings from a marketplace URL with bandwidth optimization.
     
@@ -89,114 +183,115 @@ def fetch_listings_from_url(url: str, use_proxy: bool = False, proxy_manager: Op
     # Initialize resource blocker for bandwidth optimization
     resource_blocker = ResourceBlocker()
     
-    with sync_playwright() as p:
-        # Configure browser with proxy if needed
-        browser_options = {}
-        if use_proxy and proxy_manager and proxy_manager.proxy_type == ProxyType.WEBSHARE_RESIDENTIAL:
-            proxy_config = proxy_manager.get_playwright_proxy()
-            if proxy_config:
-                browser_options["proxy"] = proxy_config
-                print(f"[*] Using WebShare residential proxy")
-        
-        # Launch browser with enhanced anti-detection
-        browser = p.chromium.launch(headless=True, **browser_options)
-        
-        # Get enhanced context options with fingerprinting protection
-        context_options = AntiDetection.get_browser_context_options()
-        context = browser.new_context(**context_options)
-        page = context.new_page()
-        
-        # Add fingerprinting protection
-        AntiDetection.add_fingerprint_protection(page)
-        
-        # Setup bandwidth optimization and real bandwidth measurement
-        page.route("**/*", resource_blocker.create_handler())
-        
-        # Add response listener to capture actual bandwidth
-        bandwidth_data = {'total_bytes': 0, 'response_count': 0}  # Simple tracking
-        
-        def handle_response(response):
-            try:
-                # Only measure responses for allowed requests
-                resource_type = response.request.resource_type
-                url = response.request.url
-                
-                # Check if this request was allowed (not blocked)
-                if not resource_blocker._should_block_resource(resource_type, url):
-                    headers = response.headers
-                    
-                    # Get the compressed size (what actually travels over the network)
-                    content_length = int(headers.get('content-length', 0)) if headers.get('content-length') else 0
-                    
-                    # If no content-length, try to get body size
-                    if content_length == 0:
-                        try:
-                            body = response.body()
-                            content_length = len(body) if body else 0
-                        except Exception:
-                            content_length = 0
-                    
-                    # Calculate realistic proxy bandwidth billing:
-                    # Request overhead: Method + URL + HTTP version + headers
-                    request_line_size = len(f"GET {url} HTTP/1.1\r\n")
-                    request_headers_size = 800  # Realistic browser headers
-                    
-                    # Response overhead: Status line + headers + body (compressed)
-                    response_status_size = 20  # "HTTP/1.1 200 OK\r\n"
-                    response_headers_size = len(str(headers)) if headers else 300
-                    response_body_size = content_length
-                    
-                    # Protocol overhead: TCP/TLS handshake, keep-alive, etc.
-                    protocol_overhead = 200
-                    
-                    # Total realistic proxy bandwidth (what actually travels over network)
-                    total_proxy_bandwidth = (request_line_size + request_headers_size + 
-                                           response_status_size + response_headers_size + 
-                                           response_body_size + protocol_overhead)
-                    
-                    # Update simple bandwidth tracking
-                    bandwidth_data['total_bytes'] += total_proxy_bandwidth
-                    bandwidth_data['response_count'] += 1
-                    
-            except Exception:
-                # Silently handle errors to avoid breaking scraping
-                pass
-        
-        page.on("response", handle_response)
-        
+    # Get reusable browser instance
+    browser = get_reusable_browser()
+    
+    # Configure proxy options for context if needed
+    context_options = AntiDetection.get_browser_context_options()
+    if use_proxy and proxy_manager and proxy_manager.proxy_type == ProxyType.WEBSHARE_RESIDENTIAL:
+        proxy_config = proxy_manager.get_playwright_proxy()
+        if proxy_config:
+            context_options["proxy"] = proxy_config
+            print(f"[*] Using WebShare residential proxy")
+    
+    # Create new context for this scrape (contexts are lightweight)
+    context = browser.new_context(**context_options)
+    page = context.new_page()
+    
+    # Add enhanced fingerprinting protection
+    AntiDetection.add_fingerprint_protection(page)
+    
+    # Setup bandwidth optimization and real bandwidth measurement
+    page.route("**/*", resource_blocker.create_handler())
+    
+    # Add response listener to capture actual bandwidth
+    bandwidth_data = {'total_bytes': 0, 'response_count': 0}  # Simple tracking
+    
+    def handle_response(response):
         try:
-            # Navigate with anti-detection delay
+            # Only measure responses for allowed requests
+            resource_type = response.request.resource_type
+            url = response.request.url
+            
+            # Check if this request was allowed (not blocked)
+            if not resource_blocker._should_block_resource(resource_type, url):
+                headers = response.headers
+                
+                # Get the compressed size (what actually travels over the network)
+                content_length = int(headers.get('content-length', 0)) if headers.get('content-length') else 0
+                
+                # If no content-length, try to get body size
+                if content_length == 0:
+                    try:
+                        body = response.body()
+                        content_length = len(body) if body else 0
+                    except Exception:
+                        content_length = 0
+                
+                # Calculate realistic proxy bandwidth billing:
+                # Request overhead: Method + URL + HTTP version + headers
+                request_line_size = len(f"GET {url} HTTP/1.1\r\n")
+                request_headers_size = 800  # Realistic browser headers
+                
+                # Response overhead: Status line + headers + body (compressed)
+                response_status_size = 20  # "HTTP/1.1 200 OK\r\n"
+                response_headers_size = len(str(headers)) if headers else 300
+                response_body_size = content_length
+                
+                # Protocol overhead: TCP/TLS handshake, keep-alive, etc.
+                protocol_overhead = 200
+                
+                # Total realistic proxy bandwidth (what actually travels over network)
+                total_proxy_bandwidth = (request_line_size + request_headers_size + 
+                                       response_status_size + response_headers_size + 
+                                       response_body_size + protocol_overhead)
+                
+                # Update simple bandwidth tracking
+                bandwidth_data['total_bytes'] += total_proxy_bandwidth
+                bandwidth_data['response_count'] += 1
+                
+        except Exception:
+            # Silently handle errors to avoid breaking scraping
+            pass
+    
+    page.on("response", handle_response)
+    
+    try:
+        # Navigate with conditional anti-detection delay
+        if not fast_mode:
             AntiDetection.add_human_delay()
-            
-            # Navigate to page
-            navigator = PageNavigator(page)
-            if not navigator.navigate_to_url(url):
-                detection_info['detection_type'] = 'navigation_failed'
-                return [], current_ip, (use_proxy and proxy_manager and proxy_manager.proxy_type == ProxyType.WEBSHARE_RESIDENTIAL), detection_info
-            
-            # Check for no results
-            if navigator.check_for_no_results():
-                detection_info['detection_type'] = 'no_results'
-                return [], current_ip, (use_proxy and proxy_manager and proxy_manager.proxy_type == ProxyType.WEBSHARE_RESIDENTIAL), detection_info
-            
-            # Debug page content and capture detection info
-            detection_info = navigator.debug_page_content()
-            
-            # Find listings directly - no change detection complexity
-            listings_finder = ListingsFinder(page)
-            listings = listings_finder.find_listings()
-            
-            # Parse listings
-            parsed_listings = []
-            if listings:
-                for i, item in enumerate(listings):
-                    parsed_listing = parse_listing(item, base_url)
-                    if parsed_listing:
-                        parsed_listings.append(parsed_listing)
+        else:
+            AntiDetection.add_human_delay(0.1, 0.3)  # Very fast delay for speed
         
-        finally:
-            context.close()
-            browser.close()
+        # Navigate to page
+        navigator = PageNavigator(page)
+        if not navigator.navigate_to_url(url):
+            detection_info['detection_type'] = 'navigation_failed'
+            return [], current_ip, (use_proxy and proxy_manager and proxy_manager.proxy_type == ProxyType.WEBSHARE_RESIDENTIAL), detection_info
+        
+        # Check for no results
+        if navigator.check_for_no_results():
+            detection_info['detection_type'] = 'no_results'
+            return [], current_ip, (use_proxy and proxy_manager and proxy_manager.proxy_type == ProxyType.WEBSHARE_RESIDENTIAL), detection_info
+        
+        # Debug page content and capture detection info
+        detection_info = navigator.debug_page_content()
+        
+        # Find listings directly - no change detection complexity
+        listings_finder = ListingsFinder(page)
+        listings = listings_finder.find_listings()
+        
+        # Parse listings
+        parsed_listings = []
+        if listings:
+            for i, item in enumerate(listings):
+                parsed_listing = parse_listing(item, base_url)
+                if parsed_listing:
+                    parsed_listings.append(parsed_listing)
+    
+    finally:
+        # Only close context, keep browser alive for reuse
+        context.close()
     
     # Print bandwidth optimization statistics
     print(f"[*] Navigation and scraping completed")
@@ -224,6 +319,12 @@ if __name__ == "__main__":
     parser.add_argument("--use-proxy", action="store_true", help="Use proxy configuration from environment")
     parser.add_argument("--proxy-type", type=str, choices=[pt.name for pt in ProxyType], 
                         default="NONE", help="Type of proxy to use")
+    parser.add_argument("--cleanup-browser", action="store_true", 
+                        help="Force cleanup browser after scraping (default: keep alive for reuse)")
+    parser.add_argument("--fast-mode", action="store_true", default=True,
+                        help="Reduce anti-detection delays for faster scraping (default: enabled)")
+    parser.add_argument("--stealth-mode", action="store_true",
+                        help="Use maximum anti-detection delays (slower but stealthier)")
     args = parser.parse_args()
     
     # Bandwidth optimization info
@@ -245,8 +346,9 @@ if __name__ == "__main__":
         print(f"[!] Error setting up proxy: {e}")
         print("[!] Will continue with scraping, but proxy may not be available.")
     
-    # Run scraper
-    listings, used_ip, is_proxy_used, detection_info = fetch_listings_from_url(args.url, args.use_proxy, proxy_manager)
+    # Run scraper with optimized defaults
+    fast_mode = args.fast_mode and not args.stealth_mode  # stealth_mode overrides fast_mode
+    listings, used_ip, is_proxy_used, detection_info = fetch_listings_from_url(args.url, args.use_proxy, proxy_manager, fast_mode)
     
     # Save results
     with open("storage/latest_results.json", "w", encoding="utf-8") as f:
@@ -295,3 +397,9 @@ if __name__ == "__main__":
                     time.sleep(2)  # 2 second delay between messages
         
         print(f"[+] Notification batch complete!")
+    
+    # Don't cleanup browser by default to allow reuse in scheduled operations
+    if args.cleanup_browser:
+        cleanup_browser()
+    else:
+        pass  # Keep browser alive for reuse

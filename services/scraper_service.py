@@ -9,6 +9,11 @@ import subprocess
 from pathlib import Path
 from services.storage_service import StorageService
 
+# Import scraper engine directly for better performance
+sys.path.append(str(Path(__file__).parent.parent))
+from scraper.engine import fetch_listings_from_url
+from proxy.manager import ProxyManager, ProxyType
+
 class ScraperService:
     """Service for scraper execution and results handling"""
     
