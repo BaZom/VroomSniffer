@@ -14,34 +14,29 @@ class PageNavigator:
         self.page = page
     
     def navigate_to_url(self, url: str, timeout: int = 10000) -> bool:
-        """Navigate to URL with robust error handling"""
+        """Navigate to URL with fast loading - no unnecessary waits"""
         print(f"[*] Navigating to marketplace search page: {url}")
         
         try:
-            # Use 'domcontentloaded' first for faster initial load
+            # Use 'domcontentloaded' - this is all we need since listings are server-rendered
             self.page.goto(url, wait_until="domcontentloaded", timeout=timeout)
-            print("[*] Page initial DOM loaded, waiting for content...")
+            print("[*] Page DOM loaded - content ready for scraping")
             
-            # Then wait for network to quiet down (reduced timeout)
-            try:
-                self.page.wait_for_load_state("networkidle", timeout=8000)
-            except Exception as wait_error:
-                print(f"[!] Network idle wait timed out: {str(wait_error)}")
-                print("[*] Continuing anyway as the page content may be usable...")
+            # Skip networkidle wait - we proved it's unnecessary for Kleinanzeigen!
+            # Listings are already in the DOM after domcontentloaded
             
             return True
             
         except Exception as e:
             print(f"[!] Navigation error: {str(e)}")
-            print("[*] Trying again with a longer timeout and relaxed conditions...")
+            print("[*] Trying fallback navigation...")
             
             try:
-                # Try again with shorter timeout for faster failure
-                self.page.goto(url, wait_until="load", timeout=15000)
+                # Fallback with 'load' state and shorter timeout for faster failure
+                self.page.goto(url, wait_until="load", timeout=8000)  # Reduced from 15000
                 return True
             except Exception as e2:
-
-                print(f"[!] Second navigation attempt failed: {str(e2)}")
+                print(f"[!] Fallback navigation failed: {str(e2)}")
                 return False
     
     def check_for_no_results(self) -> bool:

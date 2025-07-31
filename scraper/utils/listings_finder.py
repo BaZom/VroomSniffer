@@ -2,7 +2,8 @@
 Listings finding utilities for VroomSniffer scraper
 """
 
-from typing import List
+from typing import List, Optional, Tuple
+import concurrent.futures
 from playwright.sync_api import Page
 
 
@@ -13,38 +14,41 @@ class ListingsFinder:
         self.page = page
     
     def find_listings(self) -> List:
-        """Find listings using multiple selector strategies"""
-        listings = []
-        
-        # Primary selector
-        try:
-            self.page.wait_for_selector(".aditem", timeout=15000)
-            listings = self.page.query_selector_all(".aditem")
-            if listings:
-                print(f"[*] Found {len(listings)} listings")
-                return listings
-        except Exception:
-            print(f"[!] No listings found with .aditem selector, trying alternatives...")
-        
-        # Alternative selectors
-        alternative_selectors = [
+        """Find listings using immediate DOM check first, then fast fallbacks"""
+        selectors = [
+            ".aditem",
             "[data-testid='result-item']",
             ".ad-listitem", 
             ".aditem-main",
             ".result-item"
         ]
         
-        for selector in alternative_selectors:
+        print("[*] Checking DOM immediately for listings...")
+        
+        # FIRST: Try immediate DOM check (no waiting) - this works for most pages
+        for selector in selectors:
+            elements = self.page.query_selector_all(selector)
+            if elements:
+                print(f"[*] Found {len(elements)} listings immediately with selector: {selector}")
+                return elements
+        
+        print("[*] No immediate listings found, trying with short waits...")
+        
+        # SECOND: If nothing found immediately, try with very short waits
+        short_timeout = 2000  # Reduced from 3000 to 2 seconds
+        
+        for selector in selectors:
             try:
-                self.page.wait_for_selector(selector, timeout=10000)
-                listings = self.page.query_selector_all(selector)
-                if listings:
-                    print(f"[*] Found {len(listings)} listings with selector: {selector}")
-                    return listings
+                # Quick check with short timeout
+                self.page.wait_for_selector(selector, timeout=short_timeout)
+                elements = self.page.query_selector_all(selector)
+                if elements:
+                    print(f"[*] Found {len(elements)} listings with selector: {selector}")
+                    return elements
             except Exception:
+                # Failed quickly, try next selector
                 continue
         
-        if not listings:
-            print("[!] No listings found with any selector - possibly no results for this search")
-        
-        return listings
+        # If we get here, no selector found any listings after ~10 seconds total (5 selectors × 2s each)
+        print("[!] No listings found with any selector - possibly no results for this search")
+        return []
